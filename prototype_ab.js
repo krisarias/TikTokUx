@@ -267,6 +267,36 @@ function handleGlobalArea(areaId, targetImage, disabledBasenames) {
   return false;
 }
 
+// Handler for areas that are active ONLY on a small set of basenames.
+// enabledBasenames: array like ['TNotfSys.png'] where the area should work; otherwise inert.
+function handleEnabledOn(areaId, targetImage, enabledBasenames) {
+  try {
+    const img = getScreenImg();
+    const cur = img ? (decodeURIComponent(img.getAttribute('src') || '').split('/').pop() || '') : '';
+    const curLow = cur.toLowerCase();
+    const enabled = Array.isArray(enabledBasenames) ? enabledBasenames.map(s => (s||'').toLowerCase()) : [];
+    if (!enabled.includes(curLow)) {
+      // inert
+      return false;
+    }
+
+    // active: navigate to targetImage (push history), record event and increment count
+    pushCurrentToHistory();
+    window.__lastAreaClicked = true;
+    incrementCount(areaId);
+    recordEvent(areaId, targetImage, false);
+
+    if (typeof targetImage === 'string') {
+      if (targetImage.startsWith('images/')) {
+        setScreen(targetImage);
+      } else if (targetImage.startsWith('/')) {
+        window.location.href = targetImage;
+      }
+    }
+  } catch(e){}
+  return false;
+}
+
 // Enable/disable a group of global areas depending on whether current screen is in the disabled list
 function updateGlobalAreasActive() {
   try {
@@ -306,6 +336,49 @@ function backFromTConfigMsj(areaId) {
     } else {
       recordEvent(areaId, 'images/A.Tratamiento/TMain.png', false);
       setScreen('images/A.Tratamiento/TMain.png');
+    }
+  } catch(e){}
+}
+
+// ---------- TActvFltrs "any-touch = go to TActv" behavior ----------
+window.__tActvFltrsHandler = window.__tActvFltrsHandler || null;
+function backFromTActvFltrs(areaId) {
+  try {
+    window.__lastAreaClicked = true;
+    if (!areaId) areaId = 'area-TActFltrs-any';
+    incrementCount(areaId);
+    // explicitly navigate to TActv
+    recordEvent(areaId, 'images/A.Tratamiento/TActv.png', false);
+    setScreen('images/A.Tratamiento/TActv.png');
+  } catch(e){}
+}
+
+function updateTActvFltrsBackBehavior() {
+  try {
+    const img = getScreenImg(); if (!img) return;
+    const src = decodeURIComponent(img.getAttribute('src') || '');
+    const basename = (src.split('/').pop() || '').toLowerCase();
+
+    // remove existing handler if present
+    if (window.__tActvFltrsHandler) {
+      document.removeEventListener('click', window.__tActvFltrsHandler, true);
+      window.__tActvFltrsHandler = null;
+    }
+
+    if (basename === 'tactvfltrs.png') {
+      const handler = function(evt) {
+        try {
+          const container = document.querySelector('.screen-wrap');
+          if (!container) return;
+          const rect = container.getBoundingClientRect();
+          if (evt.clientX < rect.left || evt.clientX > rect.right || evt.clientY < rect.top || evt.clientY > rect.bottom) return;
+          evt.preventDefault();
+          evt.stopPropagation();
+          backFromTActvFltrs('area-TActFltrs-any');
+        } catch(e){}
+      };
+      window.__tActvFltrsHandler = handler;
+      document.addEventListener('click', handler, true);
     }
   } catch(e){}
 }
@@ -381,6 +454,42 @@ function updateAreaMsj2Active() {
   } catch(e){}
 }
 
+// Toggle the active state (pointer-events + cursor) of area-TConfig: exists only on TNotfSys
+function updateAreaTConfigActive() {
+  try {
+    const img = getScreenImg(); if (!img) return;
+    const src = decodeURIComponent(img.getAttribute('src') || '');
+    const basename = (src.split('/').pop() || '').toLowerCase();
+    const el = document.getElementById('area-TConfig');
+    if (!el) return;
+    if (basename === 'tnotfsys.png') {
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+    } else {
+      el.style.pointerEvents = 'none';
+      el.style.cursor = 'default';
+    }
+  } catch(e){}
+}
+
+// Toggle the active state (pointer-events + cursor) of area-TActFltrs: exists only on TActv
+function updateAreaTActFltrsActive() {
+  try {
+    const img = getScreenImg(); if (!img) return;
+    const src = decodeURIComponent(img.getAttribute('src') || '');
+    const basename = (src.split('/').pop() || '').toLowerCase();
+    const el = document.getElementById('area-TActFltrs');
+    if (!el) return;
+    if (basename === 'tactv.png') {
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+    } else {
+      el.style.pointerEvents = 'none';
+      el.style.cursor = 'default';
+    }
+  } catch(e){}
+}
+
 // ---------- Area overlay helpers (visual purple markers) ----------
 function removeAreaOverlays() {
   try {
@@ -442,6 +551,14 @@ function createAreaOverlays() {
         const id = (area.id || '').toLowerCase();
         if ((id === 'area-tconfigmsj' || id === 'area-msj2') && cur.toLowerCase() !== 'tmain.png') {
           // skip creating overlay for these areas when not on TMain
+          return;
+        }
+        // area-TConfig should only be shown on TNotfSys
+        if (id === 'area-tconfig' && cur.toLowerCase() !== 'tnotfsys.png') {
+          return;
+        }
+        // area-TActFltrs should only be shown on TActv
+        if (id === 'area-tactfltrs' && cur.toLowerCase() !== 'tactv.png') {
           return;
         }
         const coords = (area.getAttribute('coords') || '').split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
@@ -668,6 +785,10 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   try { createAreaOverlays(); } catch(e){}
   try { updateTConfigMsjBackBehavior(); } catch(e){}
   try { updateTConfigMsjAreaActive(); } catch(e){}
+  try { updateAreaMsj2Active(); } catch(e){}
+  try { updateAreaTConfigActive(); } catch(e){}
+  try { updateAreaTActFltrsActive(); } catch(e){}
+  try { updateTActvFltrsBackBehavior(); } catch(e){}
 
     // image selector wiring (populated from HTML options)
     try {
@@ -689,6 +810,10 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
           }
           try { updateTConfigMsjBackBehavior(); } catch(e){}
           try { updateTConfigMsjAreaActive(); } catch(e){}
+          try { updateAreaMsj2Active(); } catch(e){}
+          try { updateAreaTConfigActive(); } catch(e){}
+          try { updateAreaTActFltrsActive(); } catch(e){}
+          try { updateTActvFltrsBackBehavior(); } catch(e){}
         });
       }
     } catch(e){}
@@ -745,6 +870,9 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     // always re-position overlays on resize; redraw heatmap only when visible
     try { createAreaOverlays(); } catch(e){}
     try { updateTConfigMsjAreaActive(); } catch(e){}
+    try { updateAreaMsj2Active(); } catch(e){}
+    try { updateAreaTConfigActive(); } catch(e){}
+    try { updateAreaTActFltrsActive(); } catch(e){}
     const canvas = getHeatmapCanvas();
     if (!canvas || canvas.style.display === 'none') return;
     drawHeatmap();
@@ -762,6 +890,11 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
         try { updateGlobalAreasActive(); } catch(e){}
         try { createAreaOverlays(); } catch(e){}
         try { updateTConfigMsjBackBehavior(); } catch(e){}
+        try { updateTConfigMsjAreaActive(); } catch(e){}
+        try { updateAreaMsj2Active(); } catch(e){}
+        try { updateAreaTConfigActive(); } catch(e){}
+        try { updateAreaTActFltrsActive(); } catch(e){}
+        try { updateTActvFltrsBackBehavior(); } catch(e){}
       }, { once: true });
     }
   };
