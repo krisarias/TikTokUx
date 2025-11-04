@@ -1,7 +1,29 @@
 // ------------ Simple A/B assignment --------------
+// Debug helper: detect if the script loads and capture unhandled errors (useful on GitHub Pages)
+try {
+  console.log('prototype_ab.js loaded', location.href);
+} catch(e) {}
+window.addEventListener && window.addEventListener('error', function(evt) {
+  try {
+    const err = { message: evt.message, filename: evt.filename, lineno: evt.lineno, colno: evt.colno, stack: (evt.error && evt.error.stack) || null, ts: new Date().toISOString() };
+    try { localStorage.setItem('tt_last_js_error', JSON.stringify(err)); } catch(e) {}
+    console.error('Captured JS error:', err);
+  } catch(e) {}
+});
 const VAR_KEY = 'tt_variant';
 const COUNTS_KEY = 'tt_counts_v2';
 const EVENTS_KEY = 'tt_events_v1';
+const TASKS_STATE_KEY = 'tt_tasks_state_v1';
+
+// Task list (sequence requested by user)
+const TASKS = [
+  'Revisa tus mensajes con francini1822',
+  'Revisa si tienes nuevos seguidores',
+  'Mira si han respondido a uno de tus comentarios',
+  'Revisa el resultado de una denuncia que pusiste',
+  'Cambia los ajustes de notificaciones',
+  'Cuentanos que te parecio'
+];
 
 function assignVariant() {
   let v = localStorage.getItem(VAR_KEY);
@@ -64,6 +86,148 @@ function recordEvent(areaId, target, isMiss, coords) {
     localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
     return ev;
   } catch { return null; }
+}
+
+// --------- Task state helpers ----------
+function loadTaskState() {
+  try {
+    const raw = localStorage.getItem(TASKS_STATE_KEY);
+    if (!raw) return { currentIndex: 0, runs: [] };
+    return JSON.parse(raw);
+  } catch(e) { return { currentIndex: 0, runs: [] }; }
+}
+
+function saveTaskState(state) {
+  try { localStorage.setItem(TASKS_STATE_KEY, JSON.stringify(state)); } catch(e){}
+}
+
+function pushTaskEvent(type, taskIndex, extra) {
+  // Use recordEvent to keep events unified; id indicates task action
+  try {
+    const id = type === 'start' ? 'task-start' : (type === 'finish' ? 'task-finish' : 'task-response');
+    recordEvent(id, TASKS[taskIndex] || null, false, Object.assign({ taskIndex }, extra || {}));
+  } catch(e){}
+}
+
+// --------- Simple modal helpers ----------
+function _createModal(contentEl) {
+  const backdrop = document.createElement('div');
+  backdrop.style.position = 'fixed';
+  backdrop.style.left = '0'; backdrop.style.top = '0'; backdrop.style.right = '0'; backdrop.style.bottom = '0';
+  backdrop.style.background = 'rgba(0,0,0,0.45)';
+  backdrop.style.display = 'flex';
+  backdrop.style.alignItems = 'center';
+  backdrop.style.justifyContent = 'center';
+  backdrop.style.zIndex = '10000';
+  const box = document.createElement('div');
+  box.style.background = '#fff';
+  box.style.borderRadius = '8px';
+  box.style.padding = '14px';
+  box.style.width = 'min(640px, 92%)';
+  box.style.boxShadow = '0 8px 30px rgba(0,0,0,0.35)';
+  box.appendChild(contentEl);
+  backdrop.appendChild(box);
+  document.body.appendChild(backdrop);
+  return backdrop;
+}
+
+function showStartModal(taskIndex, onSave) {
+  const container = document.createElement('div');
+  const title = document.createElement('h3'); title.textContent = 'Iniciar tarea'; title.style.marginTop = '0';
+  const txt = document.createElement('textarea'); txt.value = TASKS[taskIndex] || ''; txt.rows = 3; txt.style.width = '100%'; txt.readOnly = true; txt.style.marginBottom = '8px';
+  const notes = document.createElement('textarea'); notes.placeholder = 'Notas de inicio (opcional)'; notes.rows = 4; notes.style.width = '100%'; notes.style.marginBottom = '8px';
+  const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px';
+  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Guardar inicio'; saveBtn.style.padding = '8px 12px'; saveBtn.style.background = '#0b74de'; saveBtn.style.color = '#fff'; saveBtn.style.border = 'none'; saveBtn.style.borderRadius = '6px';
+  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #ccc'; cancelBtn.style.borderRadius = '6px';
+  row.appendChild(saveBtn); row.appendChild(cancelBtn);
+  container.appendChild(title); container.appendChild(txt); container.appendChild(notes); container.appendChild(row);
+  const modal = _createModal(container);
+  cancelBtn.addEventListener('click', () => modal.remove());
+  saveBtn.addEventListener('click', () => {
+    try {
+      const state = loadTaskState();
+      const idx = taskIndex;
+      state.runs = state.runs || [];
+      state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
+      state.runs[idx].startedAt = new Date().toISOString();
+      if (notes.value) state.runs[idx].startNotes = notes.value;
+      saveTaskState(state);
+      pushTaskEvent('start', idx, { startNotes: notes.value });
+      if (typeof onSave === 'function') onSave(state.runs[idx]);
+    } catch(e){}
+    modal.remove();
+  });
+}
+
+function showNextTaskModal(nextIndex) {
+  const container = document.createElement('div');
+  const title = document.createElement('h3'); title.textContent = 'Siguiente tarea'; title.style.marginTop = '0';
+  const txt = document.createElement('p'); txt.textContent = TASKS[nextIndex] || 'No hay más tareas'; txt.style.whiteSpace = 'pre-wrap';
+  const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.style.padding = '8px 12px'; closeBtn.style.border = '1px solid #ccc'; closeBtn.style.borderRadius = '6px';
+  container.appendChild(title); container.appendChild(txt); container.appendChild(closeBtn);
+  const modal = _createModal(container);
+  closeBtn.addEventListener('click', () => modal.remove());
+}
+
+function showFinalResponseModal(taskIndex) {
+  const container = document.createElement('div');
+  const title = document.createElement('h3'); title.textContent = 'Respuesta final'; title.style.marginTop = '0';
+  const txt = document.createElement('p'); txt.textContent = TASKS[taskIndex] || ''; txt.style.whiteSpace = 'pre-wrap';
+  const resp = document.createElement('textarea'); resp.rows = 6; resp.style.width = '100%'; resp.placeholder = 'Escribe tu respuesta aquí...'; resp.style.marginBottom = '8px';
+  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Enviar respuesta'; saveBtn.style.padding = '8px 12px'; saveBtn.style.background = '#0b74de'; saveBtn.style.color = '#fff'; saveBtn.style.border = 'none'; saveBtn.style.borderRadius = '6px';
+  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #ccc'; cancelBtn.style.borderRadius = '6px';
+  const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px'; row.appendChild(saveBtn); row.appendChild(cancelBtn);
+  container.appendChild(title); container.appendChild(txt); container.appendChild(resp); container.appendChild(row);
+  const modal = _createModal(container);
+  cancelBtn.addEventListener('click', () => modal.remove());
+  saveBtn.addEventListener('click', () => {
+    try {
+      const state = loadTaskState();
+      state.runs = state.runs || [];
+      state.runs[taskIndex] = state.runs[taskIndex] || { taskIndex: taskIndex, task: TASKS[taskIndex] };
+      state.runs[taskIndex].response = resp.value;
+      state.runs[taskIndex].finishedAt = state.runs[taskIndex].finishedAt || new Date().toISOString();
+      saveTaskState(state);
+      pushTaskEvent('response', taskIndex, { response: resp.value });
+    } catch(e){}
+    modal.remove();
+  });
+}
+
+// --------- Handlers for buttons ----------
+function handleStartTask() {
+  try {
+    const state = loadTaskState();
+    const idx = state.currentIndex || 0;
+    showStartModal(idx);
+  } catch(e){}
+}
+
+function handleEndTask() {
+  try {
+    const state = loadTaskState();
+    const idx = state.currentIndex || 0;
+    state.runs = state.runs || [];
+    state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
+    state.runs[idx].finishedAt = new Date().toISOString();
+    saveTaskState(state);
+    pushTaskEvent('finish', idx, {});
+
+    // If last task, open final response modal
+    if (idx >= TASKS.length - 1) {
+      showFinalResponseModal(idx);
+      // mark completed
+      state.currentIndex = TASKS.length;
+      saveTaskState(state);
+      return;
+    }
+
+    // show next task text and advance index
+    const next = idx + 1;
+    state.currentIndex = next;
+    saveTaskState(state);
+    showNextTaskModal(next);
+  } catch(e){}
 }
 
 function resetCounts() {
@@ -662,6 +826,14 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     } catch(e){}
 
     const screenImg = document.getElementById('screen'); if (screenImg) screenImg.addEventListener('dragstart', e => e.preventDefault());
+
+    // wire task buttons
+    try {
+      const startBtn = document.getElementById('startTaskBtn');
+      const endBtn = document.getElementById('endTaskBtn');
+      if (startBtn) startBtn.addEventListener('click', handleStartTask);
+      if (endBtn) endBtn.addEventListener('click', handleEndTask);
+    } catch(e){}
 
   // Ensure areas and any-touch handlers are initialized
   try { updateAreasActive(); } catch(e){}
