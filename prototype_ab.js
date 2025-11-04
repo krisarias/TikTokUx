@@ -194,41 +194,98 @@ function showFinalResponseModal(taskIndex) {
   });
 }
 
+// helper to mark a task as started (used by UI helpers)
+function startTaskAtIndex(idx) {
+  try {
+    const state = loadTaskState();
+    state.currentIndex = idx;
+    state.runs = state.runs || [];
+    state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
+    state.runs[idx].startedAt = state.runs[idx].startedAt || new Date().toISOString();
+    saveTaskState(state);
+    pushTaskEvent('start', idx, {});
+  } catch(e) {}
+}
+
+// show a lightweight instruction modal (read-only) for a task index
+function showInstructionModal(idx) {
+  try {
+    const container = document.createElement('div');
+    const title = document.createElement('h3'); title.textContent = 'Instrucción'; title.style.marginTop = '0';
+    const txt = document.createElement('p'); txt.textContent = TASKS[idx] || ''; txt.style.whiteSpace = 'pre-wrap'; txt.style.marginBottom = '12px';
+    const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px';
+    const startBtn = document.createElement('button'); startBtn.textContent = 'Comenzar tarea'; startBtn.style.padding = '8px 12px'; startBtn.style.background = '#0b74de'; startBtn.style.color = '#fff'; startBtn.style.border = 'none'; startBtn.style.borderRadius = '6px';
+    const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.style.padding = '8px 12px'; closeBtn.style.border = '1px solid #ccc'; closeBtn.style.borderRadius = '6px';
+    row.appendChild(startBtn); row.appendChild(closeBtn);
+    container.appendChild(title); container.appendChild(txt); container.appendChild(row);
+    const modal = _createModal(container);
+    closeBtn.addEventListener('click', () => modal.remove());
+    startBtn.addEventListener('click', () => {
+      try { startTaskAtIndex(idx); } catch(e){}
+      modal.remove();
+    });
+  } catch(e) {}
+}
+
 // --------- Handlers for buttons ----------
 function handleStartTask() {
   try {
     const state = loadTaskState();
     const idx = state.currentIndex || 0;
-    showStartModal(idx);
-  } catch(e){}
+
+    const hasStarted = state.runs && state.runs[idx] && state.runs[idx].startedAt;
+    if (!hasStarted) {
+      console.log('[AB] startTask: starting idx', idx);
+      startTaskAtIndex(idx);
+      showInstructionModal(idx);
+    } else {
+      console.log('[AB] startTask: already started, showing instruction idx', idx);
+      showInstructionModal(idx);
+    }
+
+    // Pequeño feedback visual opcional si tienes el botón
+    const btn = document.getElementById('startTaskBtn');
+    if (btn) {
+      btn.disabled = true;
+      setTimeout(() => { btn.disabled = false; }, 300);
+    }
+  } catch (e) {
+    console.error('[AB] handleStartTask error', e);
+    alert('No se pudo iniciar/mostrar la instrucción. Revisa la consola.');
+  }
 }
 
 function handleEndTask() {
   try {
     const state = loadTaskState();
     const idx = state.currentIndex || 0;
+
+    // Marcar fin de la tarea actual
     state.runs = state.runs || [];
     state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
     state.runs[idx].finishedAt = new Date().toISOString();
     saveTaskState(state);
     pushTaskEvent('finish', idx, {});
 
-    // If last task, open final response modal
+    // ¿Última tarea?
     if (idx >= TASKS.length - 1) {
+      // Abrir el modal final (único que permite escribir)
       showFinalResponseModal(idx);
-      // mark completed
+      // Marcar completado
       state.currentIndex = TASKS.length;
       saveTaskState(state);
       return;
     }
 
-    // show next task text and advance index
+    // Avanzar a la siguiente tarea: auto-inicio + instrucción
     const next = idx + 1;
-    state.currentIndex = next;
-    saveTaskState(state);
-    showNextTaskModal(next);
+    startTaskAtIndex(next);
+    showInstructionModal(next);
   } catch(e){}
 }
+
+
+
 
 function resetCounts() {
   const obj = { A: {}, B: {} };
