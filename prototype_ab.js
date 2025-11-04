@@ -213,26 +213,6 @@ function handleTMsjArea(areaId, action) {
   } catch (e) { return false; }
 }
 
-// Enable/disable the interactive areas that only work on TMsj.
-function updateTMsjAreasActive() {
-  try {
-    const active = isCurrentScreenBasename('TMsj.png');
-    const ids = ['area-solicitudMsj'];
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (active) {
-        el.style.pointerEvents = 'auto';
-        el.style.cursor = 'pointer';
-        // ensure title shows when active
-        // no-op
-      } else {
-        el.style.pointerEvents = 'none';
-        el.style.cursor = 'default';
-      }
-    });
-  } catch(e){}
-}
 
 // Generic handler for areas that should work on most screens but be disabled on a set of screens.
 // areaId: id used for counting/recording
@@ -296,32 +276,58 @@ function handleEnabledOn(areaId, targetImage, enabledBasenames) {
   } catch(e){}
   return false;
 }
+// Consolidated area activation rules.
+// Map lowercased area-id -> { enabledOn: [...], disabledOn: [...] }
+const AREA_RULES = {
+  'area-solicitudmsj': { enabledOn: ['TMsj.png'] },
+  'area-msj2': { enabledOn: ['TMain.png'] },
+  'area-tconfigmsj': { enabledOn: ['TMain.png'] },
+  'area-tconfig': { enabledOn: ['TNotfSys.png'] },
+  'area-tactfltrs': { enabledOn: ['TActv.png'] },
+  'area-denuncias': { enabledOn: ['TNotfSys.png'] },
+  'area-actualizaciones': { enabledOn: ['TSysDen.png'] },
+  // global areas: disabled on these basenames
+  'area-seguidores': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
+  'area-actividad': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
+  'area-notifsistema': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
+  'area-main': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] }
+};
 
-// Enable/disable a group of global areas depending on whether current screen is in the disabled list
-function updateGlobalAreasActive() {
+function _normalizeBasenames(arr) { return Array.isArray(arr) ? arr.map(s => (s||'').toLowerCase()) : []; }
+
+function isAreaActive(areaId) {
   try {
-    const disabled = ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'].map(s => s.toLowerCase());
-    const img = getScreenImg();
-    const cur = img ? (decodeURIComponent(img.getAttribute('src') || '').split('/').pop() || '') : '';
-    const curLow = cur.toLowerCase();
-    const active = !disabled.includes(curLow);
-    const ids = ['area-seguidores','area-actividad','area-notifsistema','area-main'];
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (active) {
-        el.style.pointerEvents = 'auto';
-        el.style.cursor = 'pointer';
-      } else {
-        el.style.pointerEvents = 'none';
-        el.style.cursor = 'default';
-      }
-    });
-  } catch(e){}
+    const img = getScreenImg(); if (!img) return false;
+    const basename = (decodeURIComponent(img.getAttribute('src') || '').split('/').pop() || '').toLowerCase();
+    const rule = AREA_RULES[(areaId||'').toLowerCase()];
+    if (!rule) return true; // default: active
+    if (rule.enabledOn) {
+      const enabled = _normalizeBasenames(rule.enabledOn);
+      return enabled.includes(basename);
+    }
+    if (rule.disabledOn) {
+      const disabled = _normalizeBasenames(rule.disabledOn);
+      return !disabled.includes(basename);
+    }
+    return true;
+  } catch(e) { return true; }
 }
 
-// ---------- TConfigMsj "any-touch = back" behavior ----------
-window.__tConfigMsjBackHandler = window.__tConfigMsjBackHandler || null;
+function updateAreasActive() {
+  try {
+    const areas = Array.from(document.querySelectorAll('map#phone-map area'));
+    areas.forEach(area => {
+      const el = document.getElementById(area.id);
+      if (!el) return;
+      const active = isAreaActive(area.id);
+      el.style.pointerEvents = active ? 'auto' : 'none';
+      el.style.cursor = active ? 'pointer' : 'default';
+    });
+  } catch(e) {}
+}
+
+// Any-touch behaviours (TConfigMsj => back, TActvFltrs => go to TActv)
+window.__anyTouchHandler = window.__anyTouchHandler || null;
 function backFromTConfigMsj(areaId) {
   try {
     window.__lastAreaClicked = true;
@@ -340,32 +346,29 @@ function backFromTConfigMsj(areaId) {
   } catch(e){}
 }
 
-// ---------- TActvFltrs "any-touch = go to TActv" behavior ----------
-window.__tActvFltrsHandler = window.__tActvFltrsHandler || null;
 function backFromTActvFltrs(areaId) {
   try {
     window.__lastAreaClicked = true;
     if (!areaId) areaId = 'area-TActFltrs-any';
     incrementCount(areaId);
-    // explicitly navigate to TActv
     recordEvent(areaId, 'images/A.Tratamiento/TActv.png', false);
     setScreen('images/A.Tratamiento/TActv.png');
   } catch(e){}
 }
 
-function updateTActvFltrsBackBehavior() {
+function updateAnyTouchBehaviors() {
   try {
     const img = getScreenImg(); if (!img) return;
     const src = decodeURIComponent(img.getAttribute('src') || '');
     const basename = (src.split('/').pop() || '').toLowerCase();
 
-    // remove existing handler if present
-    if (window.__tActvFltrsHandler) {
-      document.removeEventListener('click', window.__tActvFltrsHandler, true);
-      window.__tActvFltrsHandler = null;
+    // remove existing
+    if (window.__anyTouchHandler) {
+      document.removeEventListener('click', window.__anyTouchHandler, true);
+      window.__anyTouchHandler = null;
     }
 
-    if (basename === 'tactvfltrs.png') {
+    if (basename === 'tconfigmsj.png' || basename === 'tactvfltrs.png') {
       const handler = function(evt) {
         try {
           const container = document.querySelector('.screen-wrap');
@@ -374,118 +377,12 @@ function updateTActvFltrsBackBehavior() {
           if (evt.clientX < rect.left || evt.clientX > rect.right || evt.clientY < rect.top || evt.clientY > rect.bottom) return;
           evt.preventDefault();
           evt.stopPropagation();
-          backFromTActvFltrs('area-TActFltrs-any');
+          if (basename === 'tconfigmsj.png') backFromTConfigMsj('area-TConfigMsj-any');
+          else if (basename === 'tactvfltrs.png') backFromTActvFltrs('area-TActFltrs-any');
         } catch(e){}
       };
-      window.__tActvFltrsHandler = handler;
+      window.__anyTouchHandler = handler;
       document.addEventListener('click', handler, true);
-    }
-  } catch(e){}
-}
-
-function updateTConfigMsjBackBehavior() {
-  try {
-    const img = getScreenImg();
-    if (!img) return;
-    const src = decodeURIComponent(img.getAttribute('src') || '');
-    const basename = (src.split('/').pop() || '').toLowerCase();
-
-    // remove existing handler if present
-    if (window.__tConfigMsjBackHandler) {
-      document.removeEventListener('click', window.__tConfigMsjBackHandler, true);
-      window.__tConfigMsjBackHandler = null;
-    }
-
-    if (basename === 'tconfigmsj.png') {
-      // capture any click inside the screen-wrap and treat as back
-      const handler = function(evt) {
-        try {
-          const container = document.querySelector('.screen-wrap');
-          if (!container) return;
-          const rect = container.getBoundingClientRect();
-          // only trigger when click is inside the device area
-          if (evt.clientX < rect.left || evt.clientX > rect.right || evt.clientY < rect.top || evt.clientY > rect.bottom) return;
-          // prevent other handlers (areas) from firing
-          evt.preventDefault();
-          evt.stopPropagation();
-          backFromTConfigMsj('area-TConfigMsj-any');
-        } catch(e){}
-      };
-      window.__tConfigMsjBackHandler = handler;
-      // use capture phase so we intercept before area handlers
-      document.addEventListener('click', handler, true);
-    }
-  } catch(e){}
-}
-
-// Toggle the active state (pointer-events + cursor) of the area that only exists on TMain
-function updateTConfigMsjAreaActive() {
-  try {
-    const img = getScreenImg(); if (!img) return;
-    const src = decodeURIComponent(img.getAttribute('src') || '');
-    const basename = (src.split('/').pop() || '').toLowerCase();
-    const el = document.getElementById('area-TConfigMsj');
-    if (!el) return;
-    if (basename === 'tmain.png') {
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-    } else {
-      el.style.pointerEvents = 'none';
-      el.style.cursor = 'default';
-    }
-  } catch(e){}
-}
-
-// Toggle the active state (pointer-events + cursor) of area-msj2: it should exist only on TMain
-function updateAreaMsj2Active() {
-  try {
-    const img = getScreenImg(); if (!img) return;
-    const src = decodeURIComponent(img.getAttribute('src') || '');
-    const basename = (src.split('/').pop() || '').toLowerCase();
-    const el = document.getElementById('area-msj2');
-    if (!el) return;
-    if (basename === 'tmain.png') {
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-    } else {
-      el.style.pointerEvents = 'none';
-      el.style.cursor = 'default';
-    }
-  } catch(e){}
-}
-
-// Toggle the active state (pointer-events + cursor) of area-TConfig: exists only on TNotfSys
-function updateAreaTConfigActive() {
-  try {
-    const img = getScreenImg(); if (!img) return;
-    const src = decodeURIComponent(img.getAttribute('src') || '');
-    const basename = (src.split('/').pop() || '').toLowerCase();
-    const el = document.getElementById('area-TConfig');
-    if (!el) return;
-    if (basename === 'tnotfsys.png') {
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-    } else {
-      el.style.pointerEvents = 'none';
-      el.style.cursor = 'default';
-    }
-  } catch(e){}
-}
-
-// Toggle the active state (pointer-events + cursor) of area-TActFltrs: exists only on TActv
-function updateAreaTActFltrsActive() {
-  try {
-    const img = getScreenImg(); if (!img) return;
-    const src = decodeURIComponent(img.getAttribute('src') || '');
-    const basename = (src.split('/').pop() || '').toLowerCase();
-    const el = document.getElementById('area-TActFltrs');
-    if (!el) return;
-    if (basename === 'tactv.png') {
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-    } else {
-      el.style.pointerEvents = 'none';
-      el.style.cursor = 'default';
     }
   } catch(e){}
 }
@@ -546,21 +443,8 @@ function createAreaOverlays() {
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
     areas.forEach(area => {
       try {
-        // special-case: area-TConfigMsj and area-msj2 should only be shown on TMain
-        const cur = img ? (decodeURIComponent(img.getAttribute('src') || '').split('/').pop() || '') : '';
-        const id = (area.id || '').toLowerCase();
-        if ((id === 'area-tconfigmsj' || id === 'area-msj2') && cur.toLowerCase() !== 'tmain.png') {
-          // skip creating overlay for these areas when not on TMain
-          return;
-        }
-        // area-TConfig should only be shown on TNotfSys
-        if (id === 'area-tconfig' && cur.toLowerCase() !== 'tnotfsys.png') {
-          return;
-        }
-        // area-TActFltrs should only be shown on TActv
-        if (id === 'area-tactfltrs' && cur.toLowerCase() !== 'tactv.png') {
-          return;
-        }
+        // Skip overlays for areas that are not active on the current screen
+        if (!isAreaActive(area.id)) return;
         const coords = (area.getAttribute('coords') || '').split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
         if (!coords.length) return;
         const shape = (area.getAttribute('shape') || 'rect').toLowerCase();
@@ -779,16 +663,10 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
 
     const screenImg = document.getElementById('screen'); if (screenImg) screenImg.addEventListener('dragstart', e => e.preventDefault());
 
-  // Ensure TMsj-only areas initial state and global areas state
-  try { updateTMsjAreasActive(); } catch(e){}
-  try { updateGlobalAreasActive(); } catch(e){}
+  // Ensure areas and any-touch handlers are initialized
+  try { updateAreasActive(); } catch(e){}
   try { createAreaOverlays(); } catch(e){}
-  try { updateTConfigMsjBackBehavior(); } catch(e){}
-  try { updateTConfigMsjAreaActive(); } catch(e){}
-  try { updateAreaMsj2Active(); } catch(e){}
-  try { updateAreaTConfigActive(); } catch(e){}
-  try { updateAreaTActFltrsActive(); } catch(e){}
-  try { updateTActvFltrsBackBehavior(); } catch(e){}
+  try { updateAnyTouchBehaviors(); } catch(e){}
 
     // image selector wiring (populated from HTML options)
     try {
@@ -808,12 +686,8 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
             ctx.clearRect(0,0,canvas.width,canvas.height);
             canvas.style.display = 'none';
           }
-          try { updateTConfigMsjBackBehavior(); } catch(e){}
-          try { updateTConfigMsjAreaActive(); } catch(e){}
-          try { updateAreaMsj2Active(); } catch(e){}
-          try { updateAreaTConfigActive(); } catch(e){}
-          try { updateAreaTActFltrsActive(); } catch(e){}
-          try { updateTActvFltrsBackBehavior(); } catch(e){}
+          try { updateAreasActive(); } catch(e){}
+          try { updateAnyTouchBehaviors(); } catch(e){}
         });
       }
     } catch(e){}
@@ -869,10 +743,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   window.addEventListener('resize', () => {
     // always re-position overlays on resize; redraw heatmap only when visible
     try { createAreaOverlays(); } catch(e){}
-    try { updateTConfigMsjAreaActive(); } catch(e){}
-    try { updateAreaMsj2Active(); } catch(e){}
-    try { updateAreaTConfigActive(); } catch(e){}
-    try { updateAreaTActFltrsActive(); } catch(e){}
+    try { updateAreasActive(); } catch(e){}
     const canvas = getHeatmapCanvas();
     if (!canvas || canvas.style.display === 'none') return;
     drawHeatmap();
@@ -886,15 +757,9 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
       img.addEventListener('load', () => {
         const canvas = getHeatmapCanvas();
         if (canvas && canvas.style.display !== 'none') drawHeatmap();
-        try { updateTMsjAreasActive(); } catch(e){}
-        try { updateGlobalAreasActive(); } catch(e){}
-        try { createAreaOverlays(); } catch(e){}
-        try { updateTConfigMsjBackBehavior(); } catch(e){}
-        try { updateTConfigMsjAreaActive(); } catch(e){}
-        try { updateAreaMsj2Active(); } catch(e){}
-        try { updateAreaTConfigActive(); } catch(e){}
-        try { updateAreaTActFltrsActive(); } catch(e){}
-        try { updateTActvFltrsBackBehavior(); } catch(e){}
+  try { updateAreasActive(); } catch(e){}
+  try { createAreaOverlays(); } catch(e){}
+  try { updateAnyTouchBehaviors(); } catch(e){}
       }, { once: true });
     }
   };
