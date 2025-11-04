@@ -13,35 +13,35 @@
       <div class="screen-wrap">
   <img id="screen" src="images/A.Tratamiento/TMain.png" usemap="#phone-map" alt="Interfaz de Tik Tok">
   <!-- heatmap canvas overlays the image (sized by JS) -->
-  <canvas id="heatmap" style="position:absolute;left:0;top:0;pointer-events:none;display:none;"></canvas>
+  <canvas id="heatmap"></canvas>
 
          <!-- coordenadas -->
         <map name="phone-map" id="phone-map">
-          <area id="area-back" shape="poly" coords="90,34,20,10,20,58" href="#" alt="Back" onclick="goBack('area-back'); return false;">
-          <area id="area-TMsj-back" shape="rect" coords="12,63,34,88" href="#" alt="back" title="back" onclick="goBack('area-TMsj-back'); return false;">
-          <area id="area-msj2" target="" alt="msj2" title="msj2" href="#" coords="18,534,375,592" shape="rect" onclick="return handleTMsjArea('area-msj2','/msj');">
+          <area id="area-back" shape="poly" coords="90,34,20,10,20,58" href="#" alt="Back" data-action="goBack">
+          <area id="area-TMsj-back" shape="rect" coords="12,63,34,88" href="#" alt="back" title="back" data-action="goBack">
+          <area id="area-msj2" target="" alt="msj2" title="msj2" href="#" coords="18,534,375,592" shape="rect" data-handler="tmsj" data-target="/msj">
 
-          <area id="area-seguidores" target="" alt="Seguidores" title="Seguidores" href="#" coords="84,97,164,122" shape="rect" onclick="return handleGlobalArea('area-seguidores','images/A.Tratamiento/TPersonas.png',['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png']);">
-          <area id="area-actividad"  target="" alt="Actividad"  title="Actividad"       href="#" coords="175,98,233,117" shape="rect" onclick="return handleGlobalArea('area-actividad','images/A.Tratamiento/TActv.png',['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png']);">
-          <area id="area-notifsistema" target="" alt="NotifSistema" title="NotifSistema" href="#" coords="250,98,383,116" shape="rect" onclick="return handleGlobalArea('area-notifsistema','images/A.Tratamiento/TNotfSys.png',['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png']);">
-          <area id="area-denuncias" target="" alt="Denuncias" title="Denuncias" href="#" coords="57,143,148,169" shape="rect" onclick="return handleEnabledOn('area-denuncias','images/A.Tratamiento/TSysDen.png',['TNotfSys.png']);">
-          <area id="area-actualizaciones" target="" alt="Actualizaciones" title="Actualizaciones" href="#" coords="161,143,370,170" shape="rect" onclick="return handleEnabledOn('area-actualizaciones','images/A.Tratamiento/TNotfSys.png',['TSysDen.png']);">
-          <area id="area-TConfig" target="" alt="TConfig" title="TConfig" href="#" coords="352,59,376,80" shape="rect" onclick="return handleEnabledOn('area-TConfig','images/A.Tratamiento/TConfig.png',['TNotfSys.png']);">
-          <area id="area-TActFltrs" target="" alt="TActFltrs" title="TActFltrs" href="#" coords="244,58,262,76" shape="rect" onclick="return handleEnabledOn('area-TActFltrs','images/A.Tratamiento/TActvFltrs.png',['TActv.png']);">
-          <area id="area-TConfigMsj" target="" alt="TConfigMsj" title="TConfigMsj" href="#" coords="233,61,257,73" shape="rect" onclick="return handleGlobalArea('area-TConfigMsj','images/A.Tratamiento/TConfigMsj.png',['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png']);">
-          <area id="area-main" target="" alt="Main"      title="Main"            href="#" coords="12,100,76,120" shape="rect" onclick="return handleGlobalArea('area-main','images/A.Tratamiento/TMain.png',['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png']);">
+          <area id="area-seguidores" target="" alt="Seguidores" title="Seguidores" href="#" coords="84,97,164,122" shape="rect" data-handler="global" data-target="images/A.Tratamiento/TPersonas.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
+          <area id="area-actividad"  target="" alt="Actividad"  title="Actividad"       href="#" coords="175,98,233,117" shape="rect" data-handler="global" data-target="images/A.Tratamiento/TActv.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
+          <area id="area-notifsistema" target="" alt="NotifSistema" title="NotifSistema" href="#" coords="250,98,383,116" shape="rect" data-handler="global" data-target="images/A.Tratamiento/TNotfSys.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
+          <area id="area-denuncias" target="" alt="Denuncias" title="Denuncias" href="#" coords="57,143,148,169" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TSysDen.png" data-enabled="TNotfSys.png">
+          <area id="area-actualizaciones" target="" alt="Actualizaciones" title="Actualizaciones" href="#" coords="161,143,370,170" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TNotfSys.png" data-enabled="TSysDen.png">
+          <area id="area-TConfig" target="" alt="TConfig" title="TConfig" href="#" coords="352,59,376,80" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TConfig.png" data-enabled="TNotfSys.png">
+          <area id="area-TActFltrs" target="" alt="TActFltrs" title="TActFltrs" href="#" coords="244,58,262,76" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TActvFltrs.png" data-enabled="TActv.png">
+          <area id="area-TConfigMsj" target="" alt="TConfigMsj" title="TConfigMsj" href="#" coords="233,61,257,73" shape="rect" data-handler="global" data-target="images/A.Tratamiento/TConfigMsj.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
+          <area id="area-main" target="" alt="Main"      title="Main"            href="#" coords="12,100,76,120" shape="rect" data-handler="global" data-target="images/A.Tratamiento/TMain.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
         </map>
 
       </div>
     </div>
 
-  <div id="ab-controls" style="text-align:center;margin-top:10px;">
-    <div style="margin-bottom:6px">
+  <div id="ab-controls" class="ab-controls-centered">
+    <div class="ab-variant-row">
       Variant: <strong id="variant-label">?</strong>
       <!-- Image selector: pick one of the available test screens -->
-      <div style="margin-top:6px;">
-        <label for="imageSelector" style="font-size:13px;margin-right:6px;">Screen:</label>
-        <select id="imageSelector" style="min-width:160px;padding:4px 6px;font-size:13px;">
+      <div class="ab-image-select">
+        <label for="imageSelector" class="label-small">Screen:</label>
+        <select id="imageSelector" class="image-selector">
           <option value="images/A.Tratamiento/TMain.png">A.Tratamiento - TMain.png</option>
           <option value="images/A.Tratamiento/TMsj.png">A.Tratamiento - TMsj.png</option>
           <option value="images/A.Tratamiento/TPersonas.png">A.Tratamiento - TPersonas.png</option>
@@ -54,57 +54,57 @@
         </select>
       </div>
         <!-- Cambiar entre prototipo A y B -->
-        <div class="ab-toggle" id="variantToggle" role="tablist" aria-label="Variant toggle" style="display:inline-block;margin-left:8px;">
+        <div class="ab-toggle" id="variantToggle" role="tablist" aria-label="Variant toggle">
           <button class="ab-btn" data-variant="A" aria-pressed="false">A</button>
           <button class="ab-btn" data-variant="B" aria-pressed="false">B</button>
         </div>
     </div>
-  <button id="showCounts" style="margin-right:8px;">Show counts</button>
-  <button id="toggleHeatmap" style="margin-right:8px;">Toggle heatmap</button>
-    <button id="resetCounts" style="margin-right:8px;">Reset counts</button>
-    <button id="exportCounts">Export counts (JSON)</button>
-    <div style="margin-top:8px;font-size:13px;color:#666">se guarda localmente en el navegador</div>
+  <button id="showCounts" class="control-button">Show counts</button>
+  <button id="toggleHeatmap" class="control-button">Toggle heatmap</button>
+    <button id="resetCounts" class="control-button">Reset counts</button>
+    <button id="exportCounts" class="control-button">Export counts (JSON)</button>
+    <div class="muted small-note">se guarda localmente en el navegador</div>
   </div>
 
   <!-- Counts modal (solo en desktop) -->
   <div class="counts-modal-backdrop" id="counts-backdrop" aria-hidden="true">
     <div class="counts-modal" role="dialog" aria-modal="true" aria-labelledby="counts-title">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div class="counts-header">
         <h3 id="counts-title">Click & Event Inspector</h3>
-        <div><button id="closeCounts" style="padding:6px 8px">Close</button></div>
+        <div><button id="closeCounts" class="btn-small">Close</button></div>
       </div>
 
       <div class="summary" id="counts-summary">
         <div class="card">
           <div class="muted">Variant</div>
-          <div style="font-weight:700;font-size:18px" id="summary-variant">?</div>
+          <div class="summary-value" id="summary-variant">?</div>
         </div>
         <div class="card">
           <div class="muted">Total clicks (all areas)</div>
-          <div id="summary-total" style="font-weight:700;font-size:18px">0</div>
+          <div id="summary-total" class="summary-value">0</div>
         </div>
         <div class="card">
           <div class="muted">Missclicks</div>
-          <div id="summary-miss" style="font-weight:700;font-size:18px">0</div>
+          <div id="summary-miss" class="summary-value">0</div>
         </div>
       </div>
 
-      <div style="display:flex;gap:12px;">
-        <div style="flex:1">
+      <div class="counts-flex">
+        <div class="flex-1">
           <div class="muted">Per-variant counts</div>
-          <pre id="counts-json" style="white-space:pre-wrap;font-size:13px;color:#111;margin-top:6px;">{}</pre>
+          <pre id="counts-json" class="counts-json-pre">{}</pre>
         </div>
-        <div style="width:320px">
+        <div class="events-column">
           <div class="muted">Recent events (latest 50)</div>
-          <div class="events" id="events-list" style="margin-top:6px;font-size:13px"></div>
+          <div class="events" id="events-list"></div>
         </div>
       </div>
 
       <div class="controls-row">
         <button id="exportCountsJSON">Export counts (JSON)</button>
         <button id="exportEventsCSV">Export events (CSV)</button>
-        <button id="clearEvents" style="background:#ffecec;border:1px solid #f5c2c2">Clear all data</button>
-        <div style="flex:1"></div>
+        <button id="clearEvents" class="btn-danger">Clear all data</button>
+        <div class="flex-fill"></div>
         <div class="muted">Stored locally in browser</div>
       </div>
     </div>
@@ -112,8 +112,8 @@
 
   </div>
   <!-- Task buttons: empezar / terminar -->
-  <button id="startTaskBtn" class="task-btn" style="position:fixed;left:12px;bottom:12px;padding:10px 14px;background:#0b74de;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;z-index:9999;">Empezar tarea</button>
-  <button id="endTaskBtn" class="task-btn" style="position:fixed;right:12px;bottom:12px;padding:10px 14px;background:#e53935;color:#fff;border:none;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;z-index:9999;">Terminar tarea</button>
+  <button id="startTaskBtn" class="task-btn left">Empezar tarea</button>
+  <button id="endTaskBtn" class="task-btn right">Terminar tarea</button>
 
   <script src="prototype_ab.js"></script>
 </body>

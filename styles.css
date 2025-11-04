@@ -202,3 +202,37 @@ img#screen {
   background: #0ea5a4;
   color: #fff;
 }
+
+/* Controls moved out of HTML inline styles */
+.ab-controls-centered { text-align: center; margin-top: 10px; }
+.ab-variant-row { margin-bottom: 6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.ab-image-select { margin-top:6px; }
+.label-small { font-size:13px; margin-right:6px; }
+.image-selector { min-width:160px; padding:4px 6px; font-size:13px; }
+.control-button { margin-right:8px; padding:6px 8px; }
+.small-note { margin-top:8px; font-size:13px; color:#666; }
+
+/* Task buttons */
+.task-btn { position:fixed; bottom:12px; padding:10px 14px; background:#0b74de; color:#fff; border:none; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.2); cursor:pointer; z-index:9999; }
+.task-btn.right { right:12px; background:#e53935; }
+.task-btn.left { left:12px; }
+
+/* Backup note styling (index.backup.html) */
+.backup-note { padding:16px; font-family: system-ui, 'Segoe UI', Arial, sans-serif; }
+
+/* Small helper styles used by JS-created modals */
+.muted { color:#666; font-size:13px; }
+
+/* Counts modal helpers moved from inline styles */
+.counts-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.btn-small { padding:6px 8px; }
+.summary-value { font-weight:700; font-size:18px; }
+.counts-flex { display:flex; gap:12px; }
+.flex-1 { flex:1; }
+.counts-json-pre { white-space:pre-wrap; font-size:13px; color:#111; margin-top:6px; }
+.events-column { width:320px; }
+.events { margin-top:6px; font-size:13px; max-height:220px; overflow:auto; }
+.btn-danger { background:#ffecec; border:1px solid #f5c2c2; padding:6px 8px; }
+.flex-fill { flex:1; }
+
+

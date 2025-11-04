@@ -736,6 +736,57 @@ function updateCountsUI() {
   }
 }
 
+// Wire area elements: read data- attributes and call the correct handlers.
+function wireAreaHandlers() {
+  try {
+    const areas = Array.from(document.querySelectorAll('map#phone-map area'));
+    areas.forEach(area => {
+      // remove any existing listener to avoid double-wiring
+      try { area.removeEventListener('click', area.__prototypeClickHandler); } catch(e) {}
+      const handler = function(ev) {
+        try {
+          ev.preventDefault(); ev.stopPropagation();
+          const id = area.id;
+          const dataHandler = (area.getAttribute('data-handler') || '').toLowerCase();
+          const dataAction = (area.getAttribute('data-action') || '').toLowerCase();
+          const target = area.getAttribute('data-target');
+          const disabled = (area.getAttribute('data-disabled') || '').split('|').map(s => s.trim()).filter(Boolean);
+          const enabled = (area.getAttribute('data-enabled') || '').split('|').map(s => s.trim()).filter(Boolean);
+
+          if (dataAction === 'goback' || dataHandler === 'goback' || dataAction === 'goback') {
+            window.goBack(id);
+            return false;
+          }
+
+          if (dataHandler === 'tmsj') {
+            handleTMsjArea(id, target);
+            return false;
+          }
+
+          if (dataHandler === 'global') {
+            handleGlobalArea(id, target, disabled.length ? disabled : undefined);
+            return false;
+          }
+
+          if (dataHandler === 'enabled') {
+            handleEnabledOn(id, target, enabled.length ? enabled : undefined);
+            return false;
+          }
+
+          // fallback: if a target exists, navigate to it
+          if (target) {
+            handleGlobalArea(id, target, []);
+            return false;
+          }
+        } catch(e) { /* ignore per-area errors */ }
+        return false;
+      };
+      area.__prototypeClickHandler = handler;
+      area.addEventListener('click', handler);
+    });
+  } catch(e) {}
+}
+
 // ------------ Modal wiring --------------
 function openCountsModal() { const b = document.getElementById('counts-backdrop'); if (b) { b.style.display = 'flex'; updateCountsUI(); } }
 function closeCountsModal() { const b = document.getElementById('counts-backdrop'); if (b) b.style.display = 'none'; }
@@ -836,6 +887,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     } catch(e){}
 
   // Ensure areas and any-touch handlers are initialized
+  try { wireAreaHandlers(); } catch(e){}
   try { updateAreasActive(); } catch(e){}
   try { createAreaOverlays(); } catch(e){}
   try { updateAnyTouchBehaviors(); } catch(e){}
