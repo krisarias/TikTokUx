@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title> Prototype  A/B click tracking</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="stage">
+
+    <div class="device">
+      <div class="screen-wrap">
+  <img id="screen" src="images/screen1.svg" usemap="#phone-map" alt="Interfaz de Tik Tok">
+  <!-- heatmap canvas overlays the image (sized by JS) -->
+  <canvas id="heatmap" style="display:none"></canvas>
+
+         <!-- mapa! luego tengo que modificar coordenadas -->
+        <map name="phone-map" id="phone-map">
+          <area id="area-home-1" shape="circle" coords="70,170,44" href="#" alt="Open app 1" onclick="trackAndSet('home-1','images/screen2.svg'); return false;">
+          <area id="area-home-2" shape="circle" coords="195,170,44" href="#" alt="Open app 2" onclick="trackAndSet('home-2','VARIANT_MIDDLE'); return false;">
+          <area id="area-home-3" shape="circle" coords="320,170,44" href="#" alt="Open app 3" onclick="trackAndSet('home-3','images/screen2.svg'); return false;">
+          <area id="area-back" shape="poly" coords="90,34,20,10,20,58" href="#" alt="Back" onclick="trackAndSet('back','images/screen1.svg'); return false;">
+
+        </map>
+      </div>
+    </div>
+
+  <div id="ab-controls" style="text-align:center;margin-top:10px;">
+    <div style="margin-bottom:6px">
+      Variant: <strong id="variant-label">?</strong>
+      <!-- Image selector: pick one of the available test screens -->
+      <div style="margin-top:6px;">
+        <label for="imageSelector" style="font-size:13px;margin-right:6px;">Screen:</label>
+        <select id="imageSelector" style="min-width:160px;padding:4px 6px;font-size:13px;">
+          <option value="images/screen1.svg">Default - screen1.svg</option>
+          <option value="images/screen2.svg">screen2.svg</option>
+          <option value="images/screen3.svg">screen3.svg</option>
+          <option value="images/A.Tratamiento/Tratamiento.png">A.Tratamiento - Tratamiento.png</option>
+          <option value="images/A.Tratamiento/Tratamiento. Mensajes.png">A.Tratamiento - Tratamiento. Mensajes.png</option>
+          <option value="images/A.Tratamiento/Tratamiento personas.png">A.Tratamiento - Tratamiento personas.png</option>
+          <option value="images/A.Tratamiento/Tratamiento notf sistema.png">A.Tratamiento - Tratamiento notf sistema.png</option>
+          <option value="images/A.Tratamiento/Tratamiento notf sistema denuncia.png">A.Tratamiento - Tratamiento notf sistema denuncia.png</option>
+          <option value="images/A.Tratamiento/Tratamiento configuración.png">A.Tratamiento - Tratamiento configuración.png</option>
+          <option value="images/A.Tratamiento/Tratamiento actividad.png">A.Tratamiento - Tratamiento actividad.png</option>
+          <option value="images/A.Tratamiento/Tratamiento actividad filtros.png">A.Tratamiento - Tratamiento actividad filtros.png</option>
+          <option value="images/A.Tratamiento/T. Configuración mensaje.png">A.Tratamiento - T. Configuración mensaje.png</option>
+        </select>
+      </div>
+        <!-- Cambiar entre prototipo A y B -->
+        <div class="ab-toggle" id="variantToggle" role="tablist" aria-label="Variant toggle" style="display:inline-block;margin-left:8px;">
+          <button class="ab-btn" data-variant="A" aria-pressed="false">A</button>
+          <button class="ab-btn" data-variant="B" aria-pressed="false">B</button>
+        </div>
+    </div>
+  <button id="showCounts" style="margin-right:8px;">Show counts</button>
+  <button id="toggleHeatmap" style="margin-right:8px;">Toggle heatmap</button>
+    <button id="resetCounts" style="margin-right:8px;">Reset counts</button>
+    <button id="exportCounts">Export counts (JSON)</button>
+    <div style="margin-top:8px;font-size:13px;color:#666">se guarda localmente en el navegador</div>
+  </div>
+
+  <!-- Counts modal (solo en desktop) -->
+  <div class="counts-modal-backdrop" id="counts-backdrop" aria-hidden="true">
+    <div class="counts-modal" role="dialog" aria-modal="true" aria-labelledby="counts-title">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 id="counts-title">Click & Event Inspector</h3>
+        <div><button id="closeCounts" style="padding:6px 8px">Close</button></div>
+      </div>
+
+      <div class="summary" id="counts-summary">
+        <div class="card">
+          <div class="muted">Variant</div>
+          <div style="font-weight:700;font-size:18px" id="summary-variant">?</div>
+        </div>
+        <div class="card">
+          <div class="muted">Total clicks (all areas)</div>
+          <div id="summary-total" style="font-weight:700;font-size:18px">0</div>
+        </div>
+        <div class="card">
+          <div class="muted">Missclicks</div>
+          <div id="summary-miss" style="font-weight:700;font-size:18px">0</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1">
+          <div class="muted">Per-variant counts</div>
+          <pre id="counts-json" style="white-space:pre-wrap;font-size:13px;color:#111;margin-top:6px;">{}</pre>
+        </div>
+        <div style="width:320px">
+          <div class="muted">Recent events (latest 50)</div>
+          <div class="events" id="events-list" style="margin-top:6px;font-size:13px"></div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button id="exportCountsJSON">Export counts (JSON)</button>
+        <button id="exportEventsCSV">Export events (CSV)</button>
+        <button id="clearEvents" style="background:#ffecec;border:1px solid #f5c2c2">Clear all data</button>
+        <div style="flex:1"></div>
+        <div class="muted">Stored locally in browser</div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <script src="prototype_ab.js"></script>
+</body>
+</html>

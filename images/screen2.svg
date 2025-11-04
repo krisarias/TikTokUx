@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844">
+  <rect x="0" y="0" width="390" height="844" rx="28" ry="28" fill="#0b0b0b" />
+  <rect x="12" y="12" width="366" height="820" rx="20" ry="20" fill="#ffffff" />
+
+  <!-- App header with back button (visual) -->
+  <rect x="12" y="12" width="366" height="60" fill="#0ea5a4" />
+  <!-- back button shape -->
+  <g transform="translate(18,22)" fill="#ffffff">
+    <rect x="0" y="0" width="80" height="36" rx="8" ry="8" fill="#0ea5a4" />
+    <polyline points="18,18 30,12 30,24" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    <text x="44" y="23" font-family="Arial" font-size="14" fill="#fff">Back</text>
+  </g>
+
+  <text x="195" y="260" font-family="Arial" font-size="28" fill="#0b1220" text-anchor="middle">App 1 Screen</text>
+  <circle cx="195" cy="420" r="70" fill="#f1f5f9" stroke="#cbd5e1" />
+  <text x="195" y="425" font-family="Arial" font-size="18" fill="#334155" text-anchor="middle">Content</text>
+</svg>

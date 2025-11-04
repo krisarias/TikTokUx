@@ -1,0 +1,182 @@
+/* ---------- Base layout ---------- */
+body {
+  font-family: Arial, sans-serif;
+  background: #f2f4f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Device frame ---------- */
+.device {
+  background: #111;
+  border-radius: 36px;
+  padding: 18px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+  max-width: 400px;
+  width: 90%;
+  height: auto;
+}
+
+.screen-wrap {
+  position: relative;
+  display: inline-block;
+  background: #fff;
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+img#screen {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ---------- Heatmap overlay ---------- */
+#heatmap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ---------- Hints and text ---------- */
+.hint {
+  text-align: center;
+  color: #555;
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+/* ---------- RESPONSIVE BEHAVIOR ---------- */
+
+/* Hide A/B controls and counts modal trigger on mobile */
+@media (max-width: 768px) {
+  #ab-controls,
+  #counts-panel,
+  .counts-modal-backdrop {
+    display: none !important;
+  }
+
+  body {
+    flex-direction: column;
+    padding: 20px;
+    height: auto;
+  }
+
+  .device {
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+  }
+
+  .hint {
+    font-size: 13px;
+  }
+}
+
+/* ---------- Desktop: pin controls to side ---------- */
+@media (min-width: 769px) {
+  #ab-controls {
+    position: fixed;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(255,255,255,0.98);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    z-index: 50;
+    width: 200px;
+  }
+
+  #ab-controls button {
+    display: block;
+    margin: 6px 0;
+    width: 160px;
+    text-align: left;
+  }
+
+  #counts-panel {
+    position: fixed;
+    left: 18px;
+    top: calc(50% + 220px);
+    width: 260px;
+    display: none;
+    z-index: 45;
+  }
+}
+
+/* ---------- Counts modal (desktop only) ---------- */
+.counts-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.counts-modal {
+  width: 720px;
+  max-width: calc(100% - 48px);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+  padding: 16px;
+  color: #111;
+}
+
+.counts-modal h3 { margin: 0 0 8px 0; }
+.counts-modal .summary { display:flex; gap:12px; margin-bottom:12px; }
+.counts-modal .summary .card { flex:1; background:#f8fafc; padding:10px; border-radius:8px; }
+.counts-modal pre { background:#f6f8fa; padding:8px; border-radius:6px; max-height:220px; overflow:auto; }
+.counts-modal .events { max-height:220px; overflow:auto; }
+.counts-modal .controls-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.counts-modal .muted { color:#666; font-size:13px; }
+
+@media (max-width: 1024px) {
+  .counts-modal { width: 92%; }
+}
+
+/* ---------- A/B toggle styling ---------- */
+.ab-toggle {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  display: inline-flex;
+  vertical-align: middle;
+}
+.ab-toggle .ab-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: #fff;
+  padding: 6px 10px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #0b1220;
+}
+.ab-toggle .ab-btn:first-child { border-right: 1px solid #e6eef5; }
+.ab-toggle .ab-btn.active,
+.ab-toggle .ab-btn[aria-pressed="true"] {
+  background: #0ea5a4;
+  color: #fff;
+}
