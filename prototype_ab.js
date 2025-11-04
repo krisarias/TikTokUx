@@ -88,8 +88,55 @@ function exportCounts() {
 // ------------ Navigation + tracking --------------
 function setScreen(path) {
   const img = document.getElementById('screen');
-  if (img) img.src = path;
+  if (img) img.src = encodeURI(path);
 }
+
+// History helpers: keep a simple in-memory stack of visited screens for a back button.
+window.__screenHistory = window.__screenHistory || [];
+function pushCurrentToHistory() {
+  try {
+    const img = getScreenImg();
+    if (!img) return;
+    const cur = img.getAttribute('src');
+    if (cur) {
+      window.__screenHistory = window.__screenHistory || [];
+      // avoid pushing duplicate consecutive entries
+      if (window.__screenHistory.length === 0 || window.__screenHistory[window.__screenHistory.length - 1] !== cur) {
+        window.__screenHistory.push(cur);
+      }
+    }
+  } catch(e){}
+}
+
+// Exposed goBack function: pops the last screen and navigates to it. Records the event and increments counts.
+window.goBack = function(areaId) {
+  try {
+    // If current screen is one of the pages where back should be disabled, do nothing
+    const img = getScreenImg();
+    const curSrc = img ? decodeURIComponent(img.getAttribute('src') || '') : '';
+    const curBase = curSrc.split('/').pop().toLowerCase();
+    const BACK_DISABLED = ['tconfigmsj.png', 'tmain.png'];
+    if (BACK_DISABLED.includes(curBase)) {
+      // no-op: back is disabled on these screens
+      return;
+    }
+
+    window.__lastAreaClicked = true;
+    if (!areaId) areaId = 'back';
+    incrementCount(areaId);
+    const hist = window.__screenHistory || [];
+    const prev = hist.pop();
+    window.__screenHistory = hist;
+    if (prev) {
+      recordEvent(areaId, prev, false);
+      setScreen(prev);
+    } else {
+      // fallback if no history: go to the default home screen
+      recordEvent(areaId, 'images/screen1.svg', false);
+      setScreen('images/screen1.svg');
+    }
+  } catch(e){}
+};
 
 // Track click and navigate. targetKey may be a path or 'VARIANT_MIDDLE'.
 function trackAndSet(areaId, targetKey) {
@@ -99,9 +146,13 @@ function trackAndSet(areaId, targetKey) {
   const middleMap = { A: 'images/screen2.svg', B: 'images/screen3.svg' };
   if (targetKey === 'VARIANT_MIDDLE') {
     const target = (middleMap[variant] || middleMap.A);
+    // push current screen into history before navigating to the variant middle
+    pushCurrentToHistory();
     recordEvent(areaId, target, false);
     setScreen(target);
   } else {
+    // for normal navigations, push current into history so back works
+    pushCurrentToHistory();
     recordEvent(areaId, targetKey, false);
     setScreen(targetKey);
   }
@@ -300,6 +351,28 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     } catch(e){}
 
     const screenImg = document.getElementById('screen'); if (screenImg) screenImg.addEventListener('dragstart', e => e.preventDefault());
+
+    // image selector wiring (populated from HTML options)
+    try {
+      const selector = document.getElementById('imageSelector');
+      if (selector) {
+        // set initial value if the screen src matches an option
+        try { const cur = document.getElementById('screen').getAttribute('src'); if (cur) selector.value = cur; } catch(e){}
+        selector.addEventListener('change', (ev) => {
+          const v = ev.target.value;
+          // record current screen in history so the selector can be 'backed' out of
+          pushCurrentToHistory();
+          setScreen(v);
+          // hide & clear heatmap while switching screens
+          const canvas = getHeatmapCanvas();
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            canvas.style.display = 'none';
+          }
+        });
+      }
+    } catch(e){}
 
     // Initialize segmented toggle
     try {
