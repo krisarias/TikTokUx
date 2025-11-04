@@ -5,7 +5,7 @@ try {
 } catch(e) {}
 window.addEventListener && window.addEventListener('error', function(evt) {
   try {
-    const err = { message: evt.message, filename: evt.filename, lineno: evt.lineno, colno: evt.colno, stack: (evt.error && evt.error.stack) || null, ts: new Date().toISOString() };
+  const err = { message: evt.message, filename: evt.filename, lineno: evt.lineno, colno: evt.colno, stack: (evt.error && evt.error.stack) || null, ts: isoTimestamp() };
     try { localStorage.setItem('tt_last_js_error', JSON.stringify(err)); } catch(e) {}
     console.error('Captured JS error:', err);
   } catch(e) {}
@@ -14,6 +14,27 @@ const VAR_KEY = 'tt_variant';
 const COUNTS_KEY = 'tt_counts_v2';
 const EVENTS_KEY = 'tt_events_v1';
 const TASKS_STATE_KEY = 'tt_tasks_state_v1';
+
+// Return an ISO-like timestamp in the browser's local timezone, including offset
+function isoTimestamp(d = new Date()) {
+  try {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    // timezone offset in minutes (note: getTimezoneOffset returns minutes behind UTC, so positive means west of UTC)
+    const tzMin = -d.getTimezoneOffset();
+    const sign = tzMin >= 0 ? '+' : '-';
+    const absMin = Math.abs(tzMin);
+    const tzH = String(Math.floor(absMin / 60)).padStart(2, '0');
+    const tzM = String(absMin % 60).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${min}:${ss}${sign}${tzH}:${tzM}`;
+  } catch (e) {
+    return new Date().toISOString();
+  }
+}
 
 // Task list (sequence requested by user)
 const TASKS = [
@@ -78,7 +99,7 @@ function recordEvent(areaId, target, isMiss, coords) {
       target: target || null,
       variant: localStorage.getItem(VAR_KEY) || assignVariant(),
       miss: !!isMiss,
-      ts: new Date().toISOString(),
+      ts: isoTimestamp(),
       ...(coords ? { x: coords.x, y: coords.y, w: coords.w, h: coords.h } : {})
     };
     events.push(ev);
@@ -149,7 +170,7 @@ function showStartModal(taskIndex, onSave) {
       const idx = taskIndex;
       state.runs = state.runs || [];
       state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
-      state.runs[idx].startedAt = new Date().toISOString();
+  state.runs[idx].startedAt = isoTimestamp();
       if (notes.value) state.runs[idx].startNotes = notes.value;
       saveTaskState(state);
       pushTaskEvent('start', idx, { startNotes: notes.value });
@@ -186,7 +207,7 @@ function showFinalResponseModal(taskIndex) {
       state.runs = state.runs || [];
       state.runs[taskIndex] = state.runs[taskIndex] || { taskIndex: taskIndex, task: TASKS[taskIndex] };
       state.runs[taskIndex].response = resp.value;
-      state.runs[taskIndex].finishedAt = state.runs[taskIndex].finishedAt || new Date().toISOString();
+  state.runs[taskIndex].finishedAt = state.runs[taskIndex].finishedAt || isoTimestamp();
       saveTaskState(state);
       pushTaskEvent('response', taskIndex, { response: resp.value });
     } catch(e){}
@@ -201,7 +222,7 @@ function startTaskAtIndex(idx) {
     state.currentIndex = idx;
     state.runs = state.runs || [];
     state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
-    state.runs[idx].startedAt = state.runs[idx].startedAt || new Date().toISOString();
+    state.runs[idx].startedAt = state.runs[idx].startedAt || isoTimestamp();
     saveTaskState(state);
     pushTaskEvent('start', idx, {});
   } catch(e) {}
@@ -263,7 +284,7 @@ function handleEndTask() {
     // Marcar fin de la tarea actual
     state.runs = state.runs || [];
     state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
-    state.runs[idx].finishedAt = new Date().toISOString();
+    state.runs[idx].finishedAt = isoTimestamp();
     saveTaskState(state);
     pushTaskEvent('finish', idx, {});
 
@@ -295,11 +316,11 @@ function resetCounts() {
 
 function exportCounts() {
   const data = readCounts();
-  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), variant: localStorage.getItem(VAR_KEY), counts: data }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: data }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'prototype-clicks-' + (new Date()).toISOString().slice(0,19).replace(/[:T]/g,'-') + '.json';
+  a.download = 'prototype-clicks-' + isoTimestamp().slice(0,19).replace(/[:T]/g,'-') + '.json';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -858,10 +879,10 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
 
   const exportJSON = document.getElementById('exportCountsJSON');
   if (exportJSON) exportJSON.addEventListener('click', () => {
-    const data = { exportedAt: new Date().toISOString(), variant: localStorage.getItem(VAR_KEY), counts: readCounts(), events: readEvents() };
+  const data = { exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: readCounts(), events: readEvents() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
 
   const exportCSV = document.getElementById('exportEventsCSV');
@@ -877,7 +898,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'prototype-events-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href = url; a.download = 'prototype-events-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
 
   const clearBtn = document.getElementById('clearEvents');
