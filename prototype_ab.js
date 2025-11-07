@@ -1895,10 +1895,12 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     } catch(e){}
 
     // Ensure areas and any-touch handlers are initialized
-    try { wireAreaHandlers(); } catch(e){}
-    try { updateAreasActive(); } catch(e){}
-    try { createAreaOverlays(); } catch(e){}
-    try { updateAnyTouchBehaviors(); } catch(e){}
+  try { wireAreaHandlers(); } catch(e){}
+  try { updateAreasActive(); } catch(e){}
+  // Ensure overlays are hidden by default on first load (prevent the purple debug overlays)
+  try { hideClickableOverlays(); } catch(e){}
+  try { createAreaOverlays(); } catch(e){}
+  try { updateAnyTouchBehaviors(); } catch(e){}
 
     // Miss handler (lazy attach)
     try { attachMissHandler(); } catch(e){}
