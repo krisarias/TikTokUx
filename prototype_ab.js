@@ -1,15 +1,14 @@
-// ------------ Simple A/B assignment --------------
-// Debug helper: detect if the script loads and capture unhandled errors (useful on GitHub Pages)
 try {
   console.log('prototype_ab.js loaded', location.href);
 } catch(e) {}
 window.addEventListener && window.addEventListener('error', function(evt) {
   try {
-  const err = { message: evt.message, filename: evt.filename, lineno: evt.lineno, colno: evt.colno, stack: (evt.error && evt.error.stack) || null, ts: isoTimestamp() };
+    const err = { message: evt.message, filename: evt.filename, lineno: evt.lineno, colno: evt.colno, stack: (evt.error && evt.error.stack) || null, ts: isoTimestamp() };
     try { localStorage.setItem('tt_last_js_error', JSON.stringify(err)); } catch(e) {}
     console.error('Captured JS error:', err);
   } catch(e) {}
 });
+
 const VAR_KEY = 'tt_variant';
 const COUNTS_KEY = 'tt_counts_v2';
 const EVENTS_KEY = 'tt_events_v1';
@@ -71,6 +70,134 @@ function setVariant(v) {
       });
     }
   } catch(e) {}
+
+  // Update image selector options and current screen to match selected variant
+  try {
+    const selector = document.getElementById('imageSelector');
+    // ensure selector options keep a reference to their A-base path
+    if (selector) {
+      const opts = Array.from(selector.options || []);
+      opts.forEach(o => {
+        if (!o.dataset.baseA) o.dataset.baseA = o.value;
+        // set option value to variant-specific path
+        o.value = computeVariantPathFromBase(o.dataset.baseA, v);
+      });
+
+      // derive base A for current screen and set selector value to the mapped variant path
+      const curSrc = (document.getElementById('screen') && document.getElementById('screen').getAttribute('src')) || '';
+      const baseA = deriveBaseAFromSrc(curSrc || opts[0] && (opts[0].dataset.baseA || ''));
+      const mapped = computeVariantPathFromBase(baseA, v);
+      try { selector.value = mapped; } catch(e){}
+    }
+
+    // change the visible screen: always go to the variant's MAIN screen
+    try {
+      if (v === 'A') {
+        // explicit A main
+        setScreen('images/A.Tratamiento/TMain.png');
+      } else {
+        // explicit B main
+        setScreen('images/B.Control/CMain.png');
+      }
+    } catch(e){}
+  } catch(e){}
+}
+
+// Attempt to derive the original A base path from any current src; used when toggling
+function deriveBaseAFromSrc(src) {
+  try {
+    if (!src) return 'images/A.Tratamiento/TMain.png';
+    const s = decodeURIComponent(src || '');
+    if (s.indexOf('/A.Tratamiento/') !== -1) return s;
+    if (s.indexOf('/B.Control/') !== -1) {
+      const parts = s.split('/');
+      const fn = parts.pop() || '';
+
+      // 1) reverse lookup from explicit map
+      for (const [aName, bName] of Object.entries(VARIANT_FILE_MAP)) {
+        if (bName === fn) return 'images/A.Tratamiento/' + aName;
+      }
+
+      // 2) heuristic/fuzzy: remove extension and leading 'C' (allow 'C.' etc.) and try to match to T* keys
+      const fnNoExt = fn.replace(/\.[^.]+$/, '');
+      const stripped = fnNoExt.replace(/^c[.\-_]?/i, '');
+      const targetNorm = _normalizeForMatch(stripped);
+      for (const aName of Object.keys(VARIANT_FILE_MAP)) {
+        const aNoExt = aName.replace(/\.[^.]+$/, '');
+        const aStripped = aNoExt.replace(/^t/i, '');
+        if (_normalizeForMatch(aStripped) === targetNorm) return 'images/A.Tratamiento/' + aName;
+      }
+    }
+    // fallback
+    return 'images/A.Tratamiento/TMain.png';
+  } catch(e){ return 'images/A.Tratamiento/TMain.png'; }
+}
+
+// --- Static mapping and known B filenames (generated from repo contents) ---
+// Canonical B.Control filenames (kept in sync with images/B.Control/)
+const B_FILENAMES = [
+  'C.Actividad.png',
+  'C.NuevosSeguidores.png',
+  'CSolicitudMensaje.png',
+  'CActvFltrs.png',
+  'CConfig.png',
+  'CConfigMsj.png',
+  'CMain.png',
+  'CMsj.png',
+  'CNotfSys.png',
+  'CSysDen.png'
+];
+
+// Explicit A -> B filename map where the simple heuristic would fail
+const VARIANT_FILE_MAP = {
+  'TMain.png': 'CMain.png',
+  'TMsj.png': 'CMsj.png',
+  'TActvFltrs.png': 'CActvFltrs.png',
+  'TConfig.png': 'CConfig.png',
+  'TConfigMsj.png': 'CConfigMsj.png',
+  'TNotfSys.png': 'CNotfSys.png',
+  'TSysDen.png': 'CSysDen.png',
+  'TPersonas.png': 'C.NuevosSeguidores.png',
+  'TActv.png': 'C.Actividad.png'
+};
+
+function _normalizeForMatch(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Enhanced variant path computation that uses explicit mapping and verifies existence
+function computeVariantPathFromBase(baseAPath, variant) {
+  try {
+    if (!baseAPath) return baseAPath;
+    if (variant === 'A') return baseAPath;
+    const parts = baseAPath.split('/');
+    const aName = parts.pop();
+
+    // 1) explicit mapping
+    if (VARIANT_FILE_MAP[aName]) {
+      const candidate = 'images/B.Control/' + VARIANT_FILE_MAP[aName];
+      // verify existence in B_FILENAMES (best-effort, embedded list)
+      if (B_FILENAMES.includes(VARIANT_FILE_MAP[aName])) return candidate;
+    }
+
+    // 2) heuristic: C + rest
+    const heuristic = 'C' + aName.slice(1);
+    if (B_FILENAMES.includes(heuristic)) return parts.concat([heuristic]).join('/').replace('/A.Tratamiento/', '/B.Control/');
+
+    // 3) same filename in B (rare)
+    if (B_FILENAMES.includes(aName)) return parts.concat([aName]).join('/').replace('/A.Tratamiento/', '/B.Control/');
+
+    // 4) normalized fuzzy match (strip non-alnum and compare core)
+    const targetNorm = _normalizeForMatch(aName.replace(/^t/i, ''));
+    for (const bfn of B_FILENAMES) {
+      if (_normalizeForMatch(bfn.replace(/^c/i, '')) === targetNorm) {
+        return parts.concat([bfn]).join('/').replace('/A.Tratamiento/', '/B.Control/');
+      }
+    }
+
+    // fallback: don't point to a non-existent B path; return original A path
+    return baseAPath;
+  } catch (e) { return baseAPath; }
 }
 
 function readCounts() {
@@ -94,12 +221,16 @@ function recordEvent(areaId, target, isMiss, coords) {
   try {
     const raw = localStorage.getItem(EVENTS_KEY);
     const events = raw ? JSON.parse(raw) : [];
+    // capture current screen at the time of the event for better export
+    const img = getScreenImg();
+    const screenPath = img ? decodeURIComponent(img.getAttribute('src') || '') : null;
     const ev = {
       id: areaId,
       target: target || null,
       variant: localStorage.getItem(VAR_KEY) || assignVariant(),
       miss: !!isMiss,
       ts: isoTimestamp(),
+      screen: screenPath,
       ...(coords ? { x: coords.x, y: coords.y, w: coords.w, h: coords.h } : {})
     };
     events.push(ev);
@@ -170,7 +301,7 @@ function showStartModal(taskIndex, onSave) {
       const idx = taskIndex;
       state.runs = state.runs || [];
       state.runs[idx] = state.runs[idx] || { taskIndex: idx, task: TASKS[idx] };
-  state.runs[idx].startedAt = isoTimestamp();
+      state.runs[idx].startedAt = isoTimestamp();
       if (notes.value) state.runs[idx].startNotes = notes.value;
       saveTaskState(state);
       pushTaskEvent('start', idx, { startNotes: notes.value });
@@ -207,7 +338,7 @@ function showFinalResponseModal(taskIndex) {
       state.runs = state.runs || [];
       state.runs[taskIndex] = state.runs[taskIndex] || { taskIndex: taskIndex, task: TASKS[taskIndex] };
       state.runs[taskIndex].response = resp.value;
-  state.runs[taskIndex].finishedAt = state.runs[taskIndex].finishedAt || isoTimestamp();
+      state.runs[taskIndex].finishedAt = state.runs[taskIndex].finishedAt || isoTimestamp();
       saveTaskState(state);
       pushTaskEvent('response', taskIndex, { response: resp.value });
     } catch(e){}
@@ -264,7 +395,7 @@ function handleStartTask() {
       showInstructionModal(idx);
     }
 
-    // Pequeño feedback visual opcional si tienes el botón
+    // Feedback visual si existe el botón
     const btn = document.getElementById('startTaskBtn');
     if (btn) {
       btn.disabled = true;
@@ -298,15 +429,15 @@ function handleEndTask() {
       return;
     }
 
-    // Avanzar a la siguiente tarea: auto-inicio + instrucción
     const next = idx + 1;
-    startTaskAtIndex(next);
+    // Avanzar índice y mostrar instrucción de la siguiente tarea
+    state.currentIndex = next;
+    saveTaskState(state);
     showInstructionModal(next);
-  } catch(e){}
+  } catch(e){
+    console.error('[AB] handleEndTask error', e);
+  }
 }
-
-
-
 
 function resetCounts() {
   const obj = { A: {}, B: {} };
@@ -314,9 +445,28 @@ function resetCounts() {
   return obj;
 }
 
+// Summarize miss events across all recorded events. Returns total and a
+// per-screen breakdown (basename -> count). Useful for exports.
+function getMissSummary() {
+  try {
+    const events = readEvents();
+    const misses = events.filter(e => e && e.miss);
+    const byScreen = {};
+    misses.forEach(ev => {
+      // Prefer an explicit recorded screen path, fall back to target if present
+      const screenPath = ev.screen || ev.target || '';
+      const basename = (screenPath.split && screenPath.split('/').pop && screenPath.split('/').pop()) || 'unknown';
+      const key = (basename || 'unknown').toString();
+      byScreen[key] = (byScreen[key] || 0) + 1;
+    });
+    return { total: misses.length, byScreen };
+  } catch(e) { return { total: 0, byScreen: {} }; }
+}
+
 function exportCounts() {
   const data = readCounts();
-  const blob = new Blob([JSON.stringify({ exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: data }, null, 2)], { type: 'application/json' });
+  const missSummary = getMissSummary();
+  const blob = new Blob([JSON.stringify({ exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: data, missSummary }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -426,7 +576,16 @@ function handleTMsjArea(areaId, action) {
     const cur = (getScreenImg() && decodeURIComponent(getScreenImg().getAttribute('src') || '').split('/').pop()) || '';
     const curLow = cur.toLowerCase();
 
-    if (curLow === 'tmsj.png') {
+    // treat A and B message screens equivalently (TMsj, CMsj, or "C. Solicitud de mensaje.png")
+    // Special-case: AFrancini should never be active on the B main (CMain.png).
+    // Return inert early if this area is AFrancini and we're on CMain.
+    try {
+      if ((areaId || '').toLowerCase().includes('afrancini') && curLow === 'cmain.png') {
+        return false;
+      }
+    } catch(e) {}
+
+    if (curLow === 'tmsj.png' || curLow === 'cmsj.png' || curLow === 'c. solicitud de mensaje.png') {
       window.__lastAreaClicked = true;
       incrementCount(areaId);
       recordEvent(areaId, action || null, false);
@@ -440,13 +599,17 @@ function handleTMsjArea(areaId, action) {
       return false;
     }
 
-    if (curLow === 'tmain.png') {
-      // navigate from TMain to TMsj and record the click
+    // If we're on the main screen (A or B), navigate to the matching message screen in the same folder
+    if (curLow === 'tmain.png' || curLow === 'cmain.png') {
       pushCurrentToHistory();
       window.__lastAreaClicked = true;
       incrementCount(areaId);
-      recordEvent(areaId, 'images/A.Tratamiento/TMsj.png', false);
-      setScreen('images/A.Tratamiento/TMsj.png');
+      // choose the target path based on the folder of the current image
+      const srcFull = decodeURIComponent(getScreenImg().getAttribute('src') || '');
+      let targetMsj = 'images/A.Tratamiento/TMsj.png';
+      if (srcFull.indexOf('/B.Control/') !== -1) targetMsj = 'images/B.Control/CMsj.png';
+      recordEvent(areaId, targetMsj, false);
+      setScreen(targetMsj);
       return false;
     }
 
@@ -518,21 +681,35 @@ function handleEnabledOn(areaId, targetImage, enabledBasenames) {
   } catch(e){}
   return false;
 }
-// Consolidated area activation rules.
-// Map lowercased area-id -> { enabledOn: [...], disabledOn: [...] }
+
+// Consolidated area activation rules (use canonical basenames)
 const AREA_RULES = {
+  // These areas should only be active on the A (T-*) images
+  'area-afrancini': { enabledOn: ['TMain.png'], disabledOn: ['CMain.png'] },
   'area-solicitudmsj': { enabledOn: ['TMsj.png'] },
+  // disable back on the main screens (both A and B main variants)
+  'area-back-msj': { disabledOn: ['TMain.png','CMain.png'] },
   'area-msj2': { enabledOn: ['TMain.png'] },
   'area-tconfigmsj': { enabledOn: ['TMain.png'] },
   'area-tconfig': { enabledOn: ['TNotfSys.png'] },
   'area-tactfltrs': { enabledOn: ['TActv.png'] },
-  'area-denuncias': { enabledOn: ['TNotfSys.png'] },
+  'area-denuncias': { enabledOn: ['CNotfSys.png'] },
   'area-actualizaciones': { enabledOn: ['TSysDen.png'] },
-  // global areas: disabled on these basenames
-  'area-seguidores': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
-  'area-actividad': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
-  'area-notifsistema': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] },
-  'area-main': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png'] }
+  // CMain-specific hotspots
+  'area-cmain-bfrancini': { enabledOn: ['CMain.png'] },
+  'area-cmain-newfollowers': { enabledOn: ['CMain.png'] },
+  'area-cmain-systemnotif': { enabledOn: ['CMain.png'] },
+  'area-cmain-denuncias': { enabledOn: ['CMain.png'] },
+  'area-cmain-solicitudmsj': { enabledOn: ['CMain.png'] },
+  'area-cmain-activity': { enabledOn: ['CMain.png'] },
+  // CConfig should only be active when viewing CNotfSys or CSysDen
+  'area-cconfig': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
+  // Barra de pestañas de prototipoA (usa basenames canónicos)
+  'area-seguidores': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','C.Actividad.png','CNotfSys.png','CMain.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMsj.png'] },
+  'area-actividad': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','C.Actividad.png','CNotfSys.png','CMain.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMsj.png'] },
+  'area-notifsistema': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','C.Actividad.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMain.png','CMsj.png','CNotfSys.png'] },
+  'area-main': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','CMain.png','C.Actividad.png','CNotfSys.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMsj.png'] },
+
 };
 
 function _normalizeBasenames(arr) { return Array.isArray(arr) ? arr.map(s => (s||'').toLowerCase()) : []; }
@@ -582,8 +759,11 @@ function backFromTConfigMsj(areaId) {
       recordEvent(areaId, prev, false);
       setScreen(prev);
     } else {
-      recordEvent(areaId, 'images/A.Tratamiento/TMain.png', false);
-      setScreen('images/A.Tratamiento/TMain.png');
+      // choose default main depending on current image folder (A vs B)
+      const srcNow = decodeURIComponent(getScreenImg().getAttribute('src') || '');
+      const targetMain = srcNow.indexOf('/B.Control/') !== -1 ? 'images/B.Control/CMain.png' : 'images/A.Tratamiento/TMain.png';
+      recordEvent(areaId, targetMain, false);
+      setScreen(targetMain);
     }
   } catch(e){}
 }
@@ -593,8 +773,10 @@ function backFromTActvFltrs(areaId) {
     window.__lastAreaClicked = true;
     if (!areaId) areaId = 'area-TActFltrs-any';
     incrementCount(areaId);
-    recordEvent(areaId, 'images/A.Tratamiento/TActv.png', false);
-    setScreen('images/A.Tratamiento/TActv.png');
+    const srcNow = decodeURIComponent(getScreenImg().getAttribute('src') || '');
+    const targetActv = srcNow.indexOf('/B.Control/') !== -1 ? 'images/B.Control/C.Actividad.png' : 'images/A.Tratamiento/TActv.png';
+    recordEvent(areaId, targetActv, false);
+    setScreen(targetActv);
   } catch(e){}
 }
 
@@ -676,22 +858,33 @@ function createAreaOverlays() {
 
     const naturalW = img.naturalWidth || img.width || img.clientWidth;
     const naturalH = img.naturalHeight || img.height || img.clientHeight;
-    if (!naturalW || !naturalH) return;
+    // If image has no natural size yet, disable all areas to avoid accidental clicks
+    const areasAll = Array.from(document.querySelectorAll('map#phone-map area'));
+    areasAll.forEach(a => { try { a.style.pointerEvents = 'none'; } catch(e){} });
+    if (!naturalW || !naturalH) {
+      return;
+    }
 
     const rect = img.getBoundingClientRect();
     const scaleX = rect.width / naturalW;
     const scaleY = rect.height / naturalH;
 
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
+    // Before creating overlays, disable all areas; we'll re-enable only those
+    // for which we create a visible overlay (prevents intermittent clickable zones).
+    areas.forEach(a => { try { a.style.pointerEvents = 'none'; } catch(e){} });
     areas.forEach(area => {
       try {
         // Skip overlays for areas that are not active on the current screen
         if (!isAreaActive(area.id)) return;
         const coords = (area.getAttribute('coords') || '').split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-        if (!coords.length) return;
+        // If coords are missing or invalid, ensure the area is not clickable
+        try { if (!coords.length) { area.style.pointerEvents = 'none'; return; } } catch(e) {}
         const shape = (area.getAttribute('shape') || 'rect').toLowerCase();
         const bbox = computeBBoxFromCoords(shape, coords);
-        if (!bbox) return;
+        // If we couldn't compute a bbox, disable clicks on this area to avoid
+        // invisible-but-interactive regions causing unexpected navigations.
+        try { if (!bbox) { area.style.pointerEvents = 'none'; return; } } catch(e) {}
 
         // scale
         const left = Math.round(bbox.x * scaleX);
@@ -709,11 +902,66 @@ function createAreaOverlays() {
         ov.title = area.getAttribute('title') || area.getAttribute('alt') || area.id || '';
         // append overlay above image within screen-wrap
         container.appendChild(ov);
+        // ensure the underlying <area> remains clickable if overlay was built
+        try { area.style.pointerEvents = 'auto'; } catch(e) {}
+        // If debug mode is enabled, make overlays more visible
+        try { if (window.__showClickables) ov.classList.add('debug-visible'); } catch(e) {}
       } catch (e) { /* per-area */ }
+    });
+    // Reconcile: ensure any area without a created overlay stays disabled
+    try {
+      areas.forEach(a => {
+        try {
+          const hasOv = !!container.querySelector('.area-overlay[data-area-id="' + a.id + '"]');
+          if (!hasOv) a.style.pointerEvents = 'none';
+        } catch(e){}
+      });
+    } catch(e) {}
+  } catch(e) {}
+}
+
+// Utility: explicitly reconcile areas to overlays (call when needed)
+function reconcileAreasWithOverlays() {
+  try {
+    const container = document.querySelector('.screen-wrap');
+    if (!container) return;
+    const areas = Array.from(document.querySelectorAll('map#phone-map area'));
+    areas.forEach(a => {
+      try {
+        const ov = container.querySelector('.area-overlay[data-area-id="' + a.id + '"]');
+        const active = isAreaActive(a.id);
+        if (ov && active) a.style.pointerEvents = 'auto'; else a.style.pointerEvents = 'none';
+      } catch(e) {}
     });
   } catch(e) {}
 }
 
+// Debug helpers: toggle visible purple overlays for clickable areas on current screen
+function showClickableOverlays() {
+  try {
+    window.__showClickables = true;
+    // ensure area active state is up to date
+    try { updateAreasActive(); } catch(e) {}
+    // recreate overlays and mark them debug-visible
+    removeAreaOverlays();
+    createAreaOverlays();
+    const ov = document.querySelectorAll('.area-overlay');
+    ov.forEach(o => { try { o.classList.add('debug-visible'); } catch(e){} });
+  } catch(e) {}
+}
+
+function hideClickableOverlays() {
+  try {
+    window.__showClickables = false;
+    removeAreaOverlays();
+  } catch(e) {}
+}
+
+function toggleClickableOverlays() {
+  try {
+    if (window.__showClickables) hideClickableOverlays(); else showClickableOverlays();
+  } catch(e) {}
+}
 
 function sizeHeatmapToImage() {
   const canvas = getHeatmapCanvas();
@@ -762,9 +1010,10 @@ function drawHeatmap() {
 }
 
 // Count misclicks and draw heatmap point
-(function attachMissHandler(){
+function attachMissHandler() {
   const img = document.getElementById('screen');
-  if (!img) return;
+  if (!img || img.__missHandlerAttached) return;
+
   img.addEventListener('click', (e) => {
     if (e.target && e.target.id !== 'screen') return;
     setTimeout(() => {
@@ -782,7 +1031,8 @@ function drawHeatmap() {
       window.__lastAreaClicked = false;
     }, 0);
   });
-})();
+  img.__missHandlerAttached = true;
+}
 
 // ------------ UI update helpers --------------
 function readEvents() { try { const r = localStorage.getItem(EVENTS_KEY); return r ? JSON.parse(r) : []; } catch(e){return[]} }
@@ -823,6 +1073,16 @@ function wireAreaHandlers() {
       try { area.removeEventListener('click', area.__prototypeClickHandler); } catch(e) {}
       const handler = function(ev) {
         try {
+          // If debug overlays are shown, log which area the handler matched
+          try {
+            if (window.__showClickables) {
+              const imgEl = getScreenImg();
+              const cur = imgEl ? (decodeURIComponent(imgEl.getAttribute('src') || '').split('/').pop() || '') : '';
+              const activeNow = isAreaActive(area.id);
+              console.debug('[AB DEBUG] area click', { id: area.id, dataHandler: (area.getAttribute('data-handler')||''), dataAction: (area.getAttribute('data-action')||''), target: area.getAttribute('data-target'), active: activeNow, screen: cur });
+              try { showAreaClickBadge(area.id + ' | active=' + activeNow + ' | handler=' + ((area.getAttribute('data-handler')||'') || (area.getAttribute('data-action')||'')) + ' | target=' + (area.getAttribute('data-target')||'') + ' | screen=' + cur); } catch(e){}
+            }
+          } catch(e){}
           ev.preventDefault(); ev.stopPropagation();
           const id = area.id;
           const dataHandler = (area.getAttribute('data-handler') || '').toLowerCase();
@@ -831,7 +1091,29 @@ function wireAreaHandlers() {
           const disabled = (area.getAttribute('data-disabled') || '').split('|').map(s => s.trim()).filter(Boolean);
           const enabled = (area.getAttribute('data-enabled') || '').split('|').map(s => s.trim()).filter(Boolean);
 
-          if (dataAction === 'goback' || dataHandler === 'goback' || dataAction === 'goback') {
+          // Special-case: any area related to "Solicitud" should always open the
+          // B.Control request screen (CSolicitudMensaje.png).
+          try {
+            if ((id || '').toLowerCase().includes('solicitud')) {
+              handleGlobalArea(id, 'images/B.Control/CSolicitudMensaje.png', []);
+              return false;
+            }
+          } catch(e) {}
+
+          // Special-case: area-CConfig should navigate to CConfig.png when
+          // currently viewing CNotfSys.png or CSysDen.png.
+          try {
+            if ((id || '').toLowerCase().includes('cconfig')) {
+              const imgEl = getScreenImg();
+              const cur = imgEl ? (decodeURIComponent(imgEl.getAttribute('src') || '').split('/').pop() || '').toLowerCase() : '';
+              if (cur === 'cnotfsys.png' || cur === 'csysden.png') {
+                handleGlobalArea(id, 'images/B.Control/CConfig.png', []);
+                return false;
+              }
+            }
+          } catch(e) {}
+
+          if (dataAction === 'goback' || dataHandler === 'goback') {
             window.goBack(id);
             return false;
           }
@@ -877,12 +1159,40 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   }
   const closeBtn = document.getElementById('closeCounts'); if (closeBtn) closeBtn.addEventListener('click', closeCountsModal);
 
+  const showClickablesBtn = document.getElementById('showClickables');
+  if (showClickablesBtn) showClickablesBtn.addEventListener('click', () => { toggleClickableOverlays(); });
+  
+  // Helper to show a transient on-screen badge when debugging area clicks
+  window.__areaClickBadgeTimer = null;
+  function showAreaClickBadge(msg) {
+    try {
+      let el = document.getElementById('__area_click_badge');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = '__area_click_badge';
+        el.className = 'area-click-badge';
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.style.opacity = '1';
+      if (window.__areaClickBadgeTimer) clearTimeout(window.__areaClickBadgeTimer);
+      window.__areaClickBadgeTimer = setTimeout(() => {
+        try { el.style.opacity = '0'; } catch(e){}
+      }, 3500);
+    } catch(e){}
+  }
+  // expose for use in area handler
+  window.showAreaClickBadge = showAreaClickBadge;
+
   const exportJSON = document.getElementById('exportCountsJSON');
   if (exportJSON) exportJSON.addEventListener('click', () => {
-  const data = { exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: readCounts(), events: readEvents() };
+    const counts = readCounts();
+    const events = readEvents();
+    const missSummary = getMissSummary();
+    const data = { exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: counts, events: events, missSummary };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
 
   const exportCSV = document.getElementById('exportEventsCSV');
@@ -898,7 +1208,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'prototype-events-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'prototype-events-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
 
   const clearBtn = document.getElementById('clearEvents');
@@ -964,11 +1274,14 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
       if (endBtn) endBtn.addEventListener('click', handleEndTask);
     } catch(e){}
 
-  // Ensure areas and any-touch handlers are initialized
-  try { wireAreaHandlers(); } catch(e){}
-  try { updateAreasActive(); } catch(e){}
-  try { createAreaOverlays(); } catch(e){}
-  try { updateAnyTouchBehaviors(); } catch(e){}
+    // Ensure areas and any-touch handlers are initialized
+    try { wireAreaHandlers(); } catch(e){}
+    try { updateAreasActive(); } catch(e){}
+    try { createAreaOverlays(); } catch(e){}
+    try { updateAnyTouchBehaviors(); } catch(e){}
+
+    // Miss handler (lazy attach)
+    try { attachMissHandler(); } catch(e){}
 
     // image selector wiring (populated from HTML options)
     try {
@@ -990,6 +1303,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
           }
           try { updateAreasActive(); } catch(e){}
           try { updateAnyTouchBehaviors(); } catch(e){}
+          try { attachMissHandler(); } catch(e){}
         });
       }
     } catch(e){}
@@ -1008,11 +1322,12 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
           });
         }
         const current = localStorage.getItem(VAR_KEY) || assignVariant();
-        updateToggleUI(current);
+        // Ensure variant state is fully applied (updates selector options and screen)
+        setVariant(current);
         buttons.forEach(b => b.addEventListener('click', () => {
           const v = b.getAttribute('data-variant');
           setVariant(v);
-          updateToggleUI(v);
+          // update counts display after variant change
           updateCountsUI();
         }));
       }
@@ -1057,11 +1372,12 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     const img = getScreenImg();
     if (img) {
       img.addEventListener('load', () => {
+        try { attachMissHandler(); } catch(e){}
         const canvas = getHeatmapCanvas();
         if (canvas && canvas.style.display !== 'none') drawHeatmap();
-  try { updateAreasActive(); } catch(e){}
-  try { createAreaOverlays(); } catch(e){}
-  try { updateAnyTouchBehaviors(); } catch(e){}
+        try { updateAreasActive(); } catch(e){}
+        try { createAreaOverlays(); } catch(e){}
+        try { updateAnyTouchBehaviors(); } catch(e){}
       }, { once: true });
     }
   };
