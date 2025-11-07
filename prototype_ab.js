@@ -826,12 +826,11 @@ function showPostExportRestartModal(jsonString) {
     
     let previewArea = null;
     if (jsonString) {
-      const hint = document.createElement('p'); hint.textContent = 'Puedes copiar el JSON completo.'; hint.className = 'modal-paragraph';
+      const hint = document.createElement('p'); hint.textContent = 'Si no se descargo copia y pega el JSOn en whatsapp :) '; hint.className = 'modal-paragraph';
       container.appendChild(hint);
 
   const ctrlRow = document.createElement('div'); ctrlRow.className = 'js-modal-row';
   const copyBtn = document.createElement('button'); copyBtn.textContent = 'Copiar JSON'; copyBtn.className = 'btn-primary';
-  const toggleBtn = document.createElement('button'); toggleBtn.textContent = 'Mostrar JSON'; toggleBtn.className = 'btn-close';
   ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(toggleBtn);
       container.appendChild(ctrlRow);
 
