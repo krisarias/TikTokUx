@@ -729,10 +729,10 @@ function showPostExportRestartModal(jsonString) {
 
   const ctrlRow = document.createElement('div'); ctrlRow.className = 'js-modal-row';
   const copyBtn = document.createElement('button'); copyBtn.textContent = 'Copiar JSON'; copyBtn.className = 'btn-primary';
-  const waBtn = document.createElement('button'); waBtn.textContent = 'Enviar por WhatsApp'; waBtn.className = 'btn-secondary';
-  const sendToNumberBtn = document.createElement('button'); sendToNumberBtn.textContent = 'Enviar a +506 83373159'; sendToNumberBtn.className = 'btn-primary';
+  // Single WhatsApp-send button (opens chat to the specific number)
+  const waSendBtn = document.createElement('button'); waSendBtn.textContent = 'Enviar por WhatsApp a +506 83373159'; waSendBtn.className = 'btn-primary';
   const toggleBtn = document.createElement('button'); toggleBtn.textContent = 'Mostrar JSON'; toggleBtn.className = 'btn-close';
-  ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(waBtn); ctrlRow.appendChild(sendToNumberBtn); ctrlRow.appendChild(toggleBtn);
+  ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(waSendBtn); ctrlRow.appendChild(toggleBtn);
       container.appendChild(ctrlRow);
 
       previewArea = document.createElement('textarea');
@@ -765,55 +765,58 @@ function showPostExportRestartModal(jsonString) {
 
       copyBtn.addEventListener('click', async () => {
         try {
+          // provide immediate feedback on the button and avoid double clicks
+          copyBtn.disabled = true;
           const ok = await copyToClipboard(jsonString);
-          if (ok) showToast('JSON copiado al portapapeles', 4000); else showToast('No se pudo copiar automáticamente. Selecciona y copia manualmente.', 5000);
-        } catch (e) { try { showToast('Error copiando al portapapeles', 3000); } catch(e){} }
+          if (ok) {
+            // temporary label change to confirm success
+            const prev = copyBtn.textContent;
+            copyBtn.textContent = 'Copiado';
+            showToast('JSON copiado al portapapeles', 3000);
+            setTimeout(() => { try { copyBtn.textContent = prev; copyBtn.disabled = false; } catch(e){} }, 2000);
+          } else {
+            showToast('No se pudo copiar automáticamente. Selecciona y copia manualmente.', 5000);
+            copyBtn.disabled = false;
+          }
+        } catch (e) { try { showToast('Error copiando al portapapeles', 3000); } catch(e){} finally { try { copyBtn.disabled = false; } catch(e){} } }
       });
 
       // threshold for when to prefer copy-to-clipboard + short-instruction approach
       const LARGE_THRESHOLD = 3000; // chars
 
-      waBtn.addEventListener('click', async () => {
+      // Single unified send button: copy to clipboard (with confirmation) then open WhatsApp to specific number
+      waSendBtn.addEventListener('click', async () => {
         try {
           if (!jsonString) return;
-          if (jsonString.length > LARGE_THRESHOLD) {
-            await copyToClipboard(jsonString);
-            showToast('JSON copiado. Se abrirá WhatsApp con instrucciones para pegar.', 4000);
-            const short = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
-            const url = isMobileDevice() ? ('whatsapp://send?text=' + encodeURIComponent(short)) : ('https://web.whatsapp.com/send?text=' + encodeURIComponent(short));
-            window.open(url, '_blank');
-            return;
+          // disable while processing
+          waSendBtn.disabled = true;
+          copyBtn.disabled = true;
+
+          // Always attempt to copy first so recipient gets full JSON if needed
+          const copied = await copyToClipboard(jsonString);
+          if (copied) {
+            showToast('JSON copiado al portapapeles', 2000);
+          } else {
+            showToast('No se pudo copiar automáticamente. Se abrirá WhatsApp para que pegues manualmente.', 3500);
           }
 
-          // Otherwise try to open WhatsApp with the JSON as prefilled text
-          const encoded = encodeURIComponent(participantLabel + '\n\n' + jsonString);
-          const url = isMobileDevice() ? ('whatsapp://send?text=' + encoded) : ('https://web.whatsapp.com/send?text=' + encoded);
-          window.open(url, '_blank');
-        } catch (e) {
-          try { await copyToClipboard(jsonString); } catch(e){}
-          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 4000); } catch(e){}
-        }
-      });
-
-      // Dedicated button to send to provided phone number
-      sendToNumberBtn.addEventListener('click', async () => {
-        try {
-          if (!jsonString) return;
           const phone = '50683373159';
+          let message = '';
           if (jsonString.length > LARGE_THRESHOLD) {
-            await copyToClipboard(jsonString);
-            showToast('JSON copiado. Se abrirá WhatsApp con instrucciones para pegar.', 4000);
-            const short = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
-            const url = isMobileDevice() ? ('whatsapp://send?phone=' + phone + '&text=' + encodeURIComponent(short)) : ('https://wa.me/' + phone + '?text=' + encodeURIComponent(short));
-            window.open(url, '_blank');
-            return;
+            message = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
+          } else {
+            message = participantLabel + '\n\n' + jsonString;
           }
-          const encoded = encodeURIComponent(participantLabel + '\n\n' + jsonString);
-          const url = isMobileDevice() ? ('whatsapp://send?phone=' + phone + '&text=' + encoded) : ('https://wa.me/' + phone + '?text=' + encoded);
+
+          // Use wa.me link which works on mobile and desktop (opens app or web)
+          const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+          // open in new tab/window; rely on the user's platform to route to app/web
           window.open(url, '_blank');
         } catch (e) {
           try { await copyToClipboard(jsonString); } catch(e){}
-          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 4000); } catch(e){}
+          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 3500); } catch(e){}
+        } finally {
+          try { waSendBtn.disabled = false; copyBtn.disabled = false; } catch(e){}
         }
       });
 
