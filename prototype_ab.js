@@ -814,14 +814,29 @@ function showPostExportRestartModal(jsonString) {
             message = participantLabel + '\n\n' + jsonString;
           }
 
-          // Use wa.me link which works on mobile and desktop (opens app or web)
-          const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
-          // If popup was created synchronously, navigate it to the target URL.
+          // First try the native WhatsApp URI to open the app directly on mobile
+          const nativeUrl = 'whatsapp://send?phone=' + phone + '&text=' + encodeURIComponent(message);
+          const webUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
+
           if (popup) {
-            try { popup.location.href = url; } catch(e) { window.open(url, '_blank'); }
+            try {
+              // navigate popup to native scheme first; many mobile browsers will hand this to the OS
+              popup.location.href = nativeUrl;
+              // fallback to web after a short delay if native scheme didn't open an external app
+              setTimeout(() => {
+                try { popup.location.href = webUrl; } catch(e) { try { window.open(webUrl, '_blank'); } catch(e){} }
+              }, 700);
+            } catch(e) {
+              try { popup.location.href = webUrl; } catch(e) { window.open(webUrl, '_blank'); }
+            }
           } else {
-            // fallback: open normally (may be blocked on some browsers)
-            window.open(url, '_blank');
+            // no popup (rare) -> try native first then fallback
+            try {
+              window.location.href = nativeUrl;
+              setTimeout(() => { try { window.open(webUrl, '_blank'); } catch(e){} }, 700);
+            } catch(e) {
+              try { window.open(webUrl, '_blank'); } catch(e){}
+            }
           }
         } catch (e) {
           try { await copyToClipboard(jsonString); } catch(e){}
