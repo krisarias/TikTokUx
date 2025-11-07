@@ -574,7 +574,7 @@ function exportCounts() {
   a.remove();
   URL.revokeObjectURL(url);
   try { clearAllCookies(); } catch(e){}
-  try { showPostExportRestartModal(); } catch(e){}
+  try { showPostExportRestartModal(JSON.stringify(exported, null, 2)); } catch(e){}
 }
 
 
@@ -644,7 +644,7 @@ function exportExperimentJSON() {
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
   try { clearAllCookies(); } catch(e){}
-  try { showPostExportRestartModal(); } catch(e){}
+  try { showPostExportRestartModal(JSON.stringify(payload, null, 2)); } catch(e){}
 }
 // ------------ Navigation + tracking --------------
 
@@ -701,16 +701,138 @@ function clearAllCookies() {
 }
 
 // Show a small modal right after export offering to restart counters/tasks
-function showPostExportRestartModal() {
+function showPostExportRestartModal(jsonString) {
   try {
     const container = document.createElement('div');
     const title = document.createElement('h3'); title.textContent = 'Exportado'; title.className = 'modal-title';
-    const p = document.createElement('p'); p.textContent = 'El archivo se ha generado. ¿Deseas reiniciar los contadores y las tareas para comenzar de nuevo?'; p.className = 'modal-paragraph';
+    const p = document.createElement('p'); p.textContent = 'El archivo se ha generado. Si quieres volver a empezar recarga la página'; p.className = 'modal-paragraph';
+
+    container.appendChild(title);
+    container.appendChild(p);
+
+    // derive a short participant identifier to prefill messages (use participantId if set, otherwise sessionId)
+    let participantId = null;
+    try {
+      participantId = localStorage.getItem('tt_participant_id') || localStorage.getItem('tt_session_id') || null;
+      if (!participantId) {
+        participantId = 'sess_' + Math.random().toString(36).slice(2,9);
+        try { localStorage.setItem('tt_session_id', participantId); } catch(e){}
+      }
+    } catch(e) { participantId = participantId || ('sess_' + Math.random().toString(36).slice(2,9)); }
+    const participantLabel = 'ID: ' + participantId;
+
+    // If we received the serialized JSON, offer copy + WhatsApp actions and a preview toggle
+    let previewArea = null;
+    if (jsonString) {
+      const hint = document.createElement('p'); hint.textContent = 'Puedes copiar el JSON completo o enviarlo vía WhatsApp. Si el archivo es muy grande, se copiará al portapapeles y WhatsApp abrirá con una instrucción para pegar.'; hint.className = 'modal-paragraph';
+      container.appendChild(hint);
+
+  const ctrlRow = document.createElement('div'); ctrlRow.className = 'js-modal-row';
+  const copyBtn = document.createElement('button'); copyBtn.textContent = 'Copiar JSON'; copyBtn.className = 'btn-primary';
+  const waBtn = document.createElement('button'); waBtn.textContent = 'Enviar por WhatsApp'; waBtn.className = 'btn-secondary';
+  const sendToNumberBtn = document.createElement('button'); sendToNumberBtn.textContent = 'Enviar a +506 83373159'; sendToNumberBtn.className = 'btn-primary';
+  const toggleBtn = document.createElement('button'); toggleBtn.textContent = 'Mostrar JSON'; toggleBtn.className = 'btn-close';
+  ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(waBtn); ctrlRow.appendChild(sendToNumberBtn); ctrlRow.appendChild(toggleBtn);
+      container.appendChild(ctrlRow);
+
+      previewArea = document.createElement('textarea');
+      previewArea.className = 'js-modal-textarea';
+      previewArea.rows = 12;
+      previewArea.readOnly = true;
+      previewArea.value = jsonString;
+      previewArea.style.display = 'none';
+      container.appendChild(previewArea);
+
+  // Clipboard helper with fallback
+      async function copyToClipboard(text) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+          }
+        } catch (e) {}
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed'; ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return !!ok;
+        } catch (e) { return false; }
+      }
+
+      copyBtn.addEventListener('click', async () => {
+        try {
+          const ok = await copyToClipboard(jsonString);
+          if (ok) showToast('JSON copiado al portapapeles', 4000); else showToast('No se pudo copiar automáticamente. Selecciona y copia manualmente.', 5000);
+        } catch (e) { try { showToast('Error copiando al portapapeles', 3000); } catch(e){} }
+      });
+
+      // threshold for when to prefer copy-to-clipboard + short-instruction approach
+      const LARGE_THRESHOLD = 3000; // chars
+
+      waBtn.addEventListener('click', async () => {
+        try {
+          if (!jsonString) return;
+          if (jsonString.length > LARGE_THRESHOLD) {
+            await copyToClipboard(jsonString);
+            showToast('JSON copiado. Se abrirá WhatsApp con instrucciones para pegar.', 4000);
+            const short = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
+            const url = isMobileDevice() ? ('whatsapp://send?text=' + encodeURIComponent(short)) : ('https://web.whatsapp.com/send?text=' + encodeURIComponent(short));
+            window.open(url, '_blank');
+            return;
+          }
+
+          // Otherwise try to open WhatsApp with the JSON as prefilled text
+          const encoded = encodeURIComponent(participantLabel + '\n\n' + jsonString);
+          const url = isMobileDevice() ? ('whatsapp://send?text=' + encoded) : ('https://web.whatsapp.com/send?text=' + encoded);
+          window.open(url, '_blank');
+        } catch (e) {
+          try { await copyToClipboard(jsonString); } catch(e){}
+          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 4000); } catch(e){}
+        }
+      });
+
+      // Dedicated button to send to provided phone number
+      sendToNumberBtn.addEventListener('click', async () => {
+        try {
+          if (!jsonString) return;
+          const phone = '50683373159';
+          if (jsonString.length > LARGE_THRESHOLD) {
+            await copyToClipboard(jsonString);
+            showToast('JSON copiado. Se abrirá WhatsApp con instrucciones para pegar.', 4000);
+            const short = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
+            const url = isMobileDevice() ? ('whatsapp://send?phone=' + phone + '&text=' + encodeURIComponent(short)) : ('https://wa.me/' + phone + '?text=' + encodeURIComponent(short));
+            window.open(url, '_blank');
+            return;
+          }
+          const encoded = encodeURIComponent(participantLabel + '\n\n' + jsonString);
+          const url = isMobileDevice() ? ('whatsapp://send?phone=' + phone + '&text=' + encoded) : ('https://wa.me/' + phone + '?text=' + encoded);
+          window.open(url, '_blank');
+        } catch (e) {
+          try { await copyToClipboard(jsonString); } catch(e){}
+          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 4000); } catch(e){}
+        }
+      });
+
+      toggleBtn.addEventListener('click', () => {
+        try {
+          if (!previewArea) return;
+          const shown = previewArea.style.display !== 'none';
+          previewArea.style.display = shown ? 'none' : 'block';
+          toggleBtn.textContent = shown ? 'Mostrar JSON' : 'Ocultar JSON';
+        } catch(e){}
+      });
+    }
+
     const row = document.createElement('div'); row.className = 'js-modal-row';
     const restartBtn = document.createElement('button'); restartBtn.textContent = 'Reiniciar ahora'; restartBtn.className = 'btn-primary';
     const laterBtn = document.createElement('button'); laterBtn.textContent = 'Cerrar'; laterBtn.className = 'btn-secondary';
     row.appendChild(restartBtn); row.appendChild(laterBtn);
-    container.appendChild(title); container.appendChild(p); container.appendChild(row);
+    container.appendChild(row);
+
     const modal = _createModal(container);
 
     laterBtn.addEventListener('click', () => { try { modal.remove(); } catch(e){} });
