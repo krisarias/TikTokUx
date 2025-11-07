@@ -786,6 +786,12 @@ function showPostExportRestartModal(jsonString) {
 
       // Single unified send button: copy to clipboard (with confirmation) then open WhatsApp to specific number
       waSendBtn.addEventListener('click', async () => {
+        // Open a popup synchronously to avoid popup blockers after async awaits
+        let popup = null;
+        try {
+          popup = window.open('', '_blank');
+        } catch (e) { popup = null; }
+
         try {
           if (!jsonString) return;
           // disable while processing
@@ -810,8 +816,13 @@ function showPostExportRestartModal(jsonString) {
 
           // Use wa.me link which works on mobile and desktop (opens app or web)
           const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
-          // open in new tab/window; rely on the user's platform to route to app/web
-          window.open(url, '_blank');
+          // If popup was created synchronously, navigate it to the target URL.
+          if (popup) {
+            try { popup.location.href = url; } catch(e) { window.open(url, '_blank'); }
+          } else {
+            // fallback: open normally (may be blocked on some browsers)
+            window.open(url, '_blank');
+          }
         } catch (e) {
           try { await copyToClipboard(jsonString); } catch(e){}
           try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 3500); } catch(e){}
