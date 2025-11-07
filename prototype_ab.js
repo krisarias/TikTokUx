@@ -694,7 +694,10 @@ const AREA_RULES = {
   'area-tconfigmsj': { enabledOn: ['TMain.png'] },
   'area-tconfig': { enabledOn: ['TNotfSys.png'] },
   'area-tactfltrs': { enabledOn: ['TActv.png'] },
-  'area-denuncias': { enabledOn: ['CNotfSys.png'] },
+  // ADenuncias (A variant) should only be active on TNotfSys
+  'area-adenuncias': { enabledOn: ['TNotfSys.png'] },
+  'area-bdenuncias': { enabledOn: ['CNotfSys.png'] },
+  // B/C variant denuncias (CNotfSys) handled separately
   'area-actualizaciones': { enabledOn: ['TSysDen.png'] },
   // CMain-specific hotspots
   'area-cmain-bfrancini': { enabledOn: ['CMain.png'] },
@@ -1090,7 +1093,9 @@ function updateCountsUI() {
   }
 }
 
-// Wire area elements: read data- attributes and call the correct handlers.
+// ------------ Area click wiring --------------
+// Wire up click handlers for all areas in the map
+// Handlers will check whether the area is active on the current screen before acting.
 function wireAreaHandlers() {
   try {
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
@@ -1098,15 +1103,12 @@ function wireAreaHandlers() {
     areas.forEach(area => {
       // Evita doble cableado
       try { area.removeEventListener('click', area.__prototypeClickHandler); } catch(e) {}
-
       const handler = function (ev) {
         try {
           ev.preventDefault();
           ev.stopPropagation();
-
           const id = area.id;
-
-          // 🚫 Si el área NO está activa en la pantalla actual, no hacer nada.
+          // Si el área NO está activa en la pantalla actual, no hacer nada.
           if (!isAreaActive(id)) return false;
 
           // Debug opcional
@@ -1169,25 +1171,18 @@ function wireAreaHandlers() {
             window.goBack(id);
             return false;
           }
-
-          // Handler de mensajes (TMsj/CMsj) con reglas contextuales
           if (dataHandler === 'tmsj') {
             handleTMsjArea(id, target);
             return false;
           }
-
-          // Handler global con pantallas deshabilitadas
           if (dataHandler === 'global') {
             handleGlobalArea(id, target, disabled.length ? disabled : undefined);
             return false;
           }
-
-          // Handler sólo habilitado en ciertas pantallas
           if (dataHandler === 'enabled') {
             handleEnabledOn(id, target, enabled.length ? enabled : undefined);
             return false;
           }
-          // Fallback: si hay target explícito, úsalo como navegación global controlada
           if (target) {
             handleGlobalArea(id, target, []);
             return false;
