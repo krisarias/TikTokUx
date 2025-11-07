@@ -13,6 +13,7 @@ const VAR_KEY = 'tt_variant';
 const COUNTS_KEY = 'tt_counts_v2';
 const EVENTS_KEY = 'tt_events_v1';
 const TASKS_STATE_KEY = 'tt_tasks_state_v1';
+const ALLOW_ANY_TOUCH = false;
 
 // Return an ISO-like timestamp in the browser's local timezone, including offset
 function isoTimestamp(d = new Date()) {
@@ -782,33 +783,58 @@ function backFromTActvFltrs(areaId) {
 
 function updateAnyTouchBehaviors() {
   try {
-    const img = getScreenImg(); if (!img) return;
+    // 🔒 Puerta dura: si no permitimos any-touch, desmonta el handler global y sal.
+    if (typeof ALLOW_ANY_TOUCH !== 'undefined' && !ALLOW_ANY_TOUCH) {
+      if (window.__anyTouchHandler) {
+        document.removeEventListener('click', window.__anyTouchHandler, true);
+        window.__anyTouchHandler = null;
+      }
+      return;
+    }
+
+    const img = getScreenImg();
+    if (!img) {
+      // No imagen => asegúrate de no dejar handler colgado
+      if (window.__anyTouchHandler) {
+        document.removeEventListener('click', window.__anyTouchHandler, true);
+        window.__anyTouchHandler = null;
+      }
+      return;
+    }
+
     const src = decodeURIComponent(img.getAttribute('src') || '');
     const basename = (src.split('/').pop() || '').toLowerCase();
 
-    // remove existing
+    // Desmonta cualquier handler previo antes de evaluar la nueva pantalla
     if (window.__anyTouchHandler) {
       document.removeEventListener('click', window.__anyTouchHandler, true);
       window.__anyTouchHandler = null;
     }
 
+    // Solo monta el capturador en las pantallas que lo necesitan
     if (basename === 'tconfigmsj.png' || basename === 'tactvfltrs.png') {
       const handler = function(evt) {
         try {
           const container = document.querySelector('.screen-wrap');
           if (!container) return;
           const rect = container.getBoundingClientRect();
-          if (evt.clientX < rect.left || evt.clientX > rect.right || evt.clientY < rect.top || evt.clientY > rect.bottom) return;
+          if (evt.clientX < rect.left || evt.clientX > rect.right ||
+              evt.clientY < rect.top  || evt.clientY > rect.bottom) return;
+
           evt.preventDefault();
           evt.stopPropagation();
-          if (basename === 'tconfigmsj.png') backFromTConfigMsj('area-TConfigMsj-any');
-          else if (basename === 'tactvfltrs.png') backFromTActvFltrs('area-TActFltrs-any');
-        } catch(e){}
+
+          if (basename === 'tconfigmsj.png') {
+            backFromTConfigMsj('area-TConfigMsj-any');
+          } else if (basename === 'tactvfltrs.png') {
+            backFromTActvFltrs('area-TActFltrs-any');
+          }
+        } catch(e) {}
       };
       window.__anyTouchHandler = handler;
       document.addEventListener('click', handler, true);
     }
-  } catch(e){}
+  } catch(e) {}
 }
 
 // ---------- Area overlay helpers (visual purple markers) ----------
@@ -1068,84 +1094,115 @@ function updateCountsUI() {
 function wireAreaHandlers() {
   try {
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
+
     areas.forEach(area => {
-      // remove any existing listener to avoid double-wiring
+      // Evita doble cableado
       try { area.removeEventListener('click', area.__prototypeClickHandler); } catch(e) {}
-      const handler = function(ev) {
+
+      const handler = function (ev) {
         try {
-          // If debug overlays are shown, log which area the handler matched
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          const id = area.id;
+
+          // 🚫 Si el área NO está activa en la pantalla actual, no hacer nada.
+          if (!isAreaActive(id)) return false;
+
+          // Debug opcional
           try {
             if (window.__showClickables) {
               const imgEl = getScreenImg();
               const cur = imgEl ? (decodeURIComponent(imgEl.getAttribute('src') || '').split('/').pop() || '') : '';
-              const activeNow = isAreaActive(area.id);
-              console.debug('[AB DEBUG] area click', { id: area.id, dataHandler: (area.getAttribute('data-handler')||''), dataAction: (area.getAttribute('data-action')||''), target: area.getAttribute('data-target'), active: activeNow, screen: cur });
-              try { showAreaClickBadge(area.id + ' | active=' + activeNow + ' | handler=' + ((area.getAttribute('data-handler')||'') || (area.getAttribute('data-action')||'')) + ' | target=' + (area.getAttribute('data-target')||'') + ' | screen=' + cur); } catch(e){}
+              const activeNow = isAreaActive(id);
+              console.debug('[AB DEBUG] area click', {
+                id,
+                dataHandler: (area.getAttribute('data-handler') || ''),
+                dataAction:  (area.getAttribute('data-action')  || ''),
+                target:      (area.getAttribute('data-target')  || ''),
+                active: activeNow,
+                screen: cur
+              });
+              try {
+                showAreaClickBadge(
+                  id + ' | active=' + activeNow +
+                  ' | handler=' + ((area.getAttribute('data-handler')||'') || (area.getAttribute('data-action')||'')) +
+                  ' | target=' + (area.getAttribute('data-target')||'')
+                );
+              } catch(e){}
             }
           } catch(e){}
-          ev.preventDefault(); ev.stopPropagation();
-          const id = area.id;
-          const dataHandler = (area.getAttribute('data-handler') || '').toLowerCase();
-          const dataAction = (area.getAttribute('data-action') || '').toLowerCase();
-          const target = area.getAttribute('data-target');
-          const disabled = (area.getAttribute('data-disabled') || '').split('|').map(s => s.trim()).filter(Boolean);
-          const enabled = (area.getAttribute('data-enabled') || '').split('|').map(s => s.trim()).filter(Boolean);
 
-          // Special-case: any area related to "Solicitud" should always open the
-          // B.Control request screen (CSolicitudMensaje.png).
+          const dataHandler = (area.getAttribute('data-handler') || '').toLowerCase();
+          const dataAction  = (area.getAttribute('data-action')  || '').toLowerCase();
+          const rawTarget   = area.getAttribute('data-target');
+          const disabled    = (area.getAttribute('data-disabled') || '').split('|').map(s => s.trim()).filter(Boolean);
+          const enabled     = (area.getAttribute('data-enabled')  || '').split('|').map(s => s.trim()).filter(Boolean);
+
+          // Normaliza target al prototipo actual si existe helper; si no, usa el original
+          const normalize = (t) => (typeof normalizeTargetToCurrentVariant === 'function' ? normalizeTargetToCurrentVariant(t) : t);
+          const target = typeof rawTarget === 'string' ? normalize(rawTarget) : rawTarget;
+
+          // Special-case: "Solicitud" debe abrir la pantalla de solicitud
+          // pero sin cruzar de prototipo (normalize() se encarga de anclarlo).
           try {
             if ((id || '').toLowerCase().includes('solicitud')) {
-              handleGlobalArea(id, 'images/B.Control/CSolicitudMensaje.png', []);
+              handleGlobalArea(id, normalize('images/B.Control/CSolicitudMensaje.png'), []);
               return false;
             }
           } catch(e) {}
 
-          // Special-case: area-CConfig should navigate to CConfig.png when
-          // currently viewing CNotfSys.png or CSysDen.png.
+          // Special-case: CConfig accesible desde CNotfSys / CSysDen
           try {
             if ((id || '').toLowerCase().includes('cconfig')) {
               const imgEl = getScreenImg();
               const cur = imgEl ? (decodeURIComponent(imgEl.getAttribute('src') || '').split('/').pop() || '').toLowerCase() : '';
               if (cur === 'cnotfsys.png' || cur === 'csysden.png') {
-                handleGlobalArea(id, 'images/B.Control/CConfig.png', []);
+                handleGlobalArea(id, normalize('images/B.Control/CConfig.png'), []);
                 return false;
               }
             }
           } catch(e) {}
 
+          // Botón volver
           if (dataAction === 'goback' || dataHandler === 'goback') {
             window.goBack(id);
             return false;
           }
 
+          // Handler de mensajes (TMsj/CMsj) con reglas contextuales
           if (dataHandler === 'tmsj') {
             handleTMsjArea(id, target);
             return false;
           }
 
+          // Handler global con pantallas deshabilitadas
           if (dataHandler === 'global') {
             handleGlobalArea(id, target, disabled.length ? disabled : undefined);
             return false;
           }
 
+          // Handler sólo habilitado en ciertas pantallas
           if (dataHandler === 'enabled') {
             handleEnabledOn(id, target, enabled.length ? enabled : undefined);
             return false;
           }
-
-          // fallback: if a target exists, navigate to it
+          // Fallback: si hay target explícito, úsalo como navegación global controlada
           if (target) {
             handleGlobalArea(id, target, []);
             return false;
           }
-        } catch(e) { /* ignore per-area errors */ }
+        } catch (e) {
+          // Ignora errores por área
+        }
         return false;
       };
       area.__prototypeClickHandler = handler;
       area.addEventListener('click', handler);
     });
-  } catch(e) {}
+  } catch (e) {}
 }
+
 
 // ------------ Modal wiring --------------
 function openCountsModal() { const b = document.getElementById('counts-backdrop'); if (b) { b.style.display = 'flex'; updateCountsUI(); } }
