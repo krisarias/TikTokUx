@@ -265,6 +265,7 @@ function recordEvent(areaId, target, isMiss, coords) {
       variant: localStorage.getItem(VAR_KEY) || assignVariant(),
       miss: !!isMiss,
       ts: isoTimestamp(),
+      ts_ms: Date.now(),
       screen: screenPath,
       taskIndex,                         // ← NUEVO
       ...(coords ? { x: coords.x, y: coords.y, w: coords.w, h: coords.h } : {})
@@ -684,7 +685,6 @@ function resetAllData(reloadAfter = false) {
   } catch(e){}
 }
 
-// Best-effort clear of all cookies for current domain/path
 function clearAllCookies() {
   try {
     const pairs = document.cookie ? document.cookie.split(';') : [];
@@ -698,7 +698,16 @@ function clearAllCookies() {
       } catch(e){}
     });
   } catch(e){}
+
+  // Also clear known localStorage keys and sessionStorage 
+  try {
+    const keys = [COUNTS_KEY, EVENTS_KEY, TASKS_STATE_KEY, VAR_KEY, 'tt_session_id', 'tt_participant_id', 'tt_variant_assigned_at', 'tt_last_js_error'];
+    keys.forEach(k => { try { if (k) localStorage.removeItem(k); } catch(e){} });
+    try { sessionStorage.clear(); } catch(e){}
+    try { showToast('Intento de borrado de cookies y localStorage realizado', 3500); } catch(e){}
+  } catch(e) {}
 }
+
 
 // Show a small modal right after export offering to restart counters/tasks
 function showPostExportRestartModal(jsonString) {
@@ -1496,21 +1505,42 @@ function drawHeatmap() {
 
   let events = [];
   try { events = JSON.parse(localStorage.getItem(EVENTS_KEY) || '[]'); } catch(e) {}
-  const misses = events.filter(e => e.miss && Number.isFinite(e.x) && Number.isFinite(e.y)).slice(-2000);
-  if (!misses.length) return;
+  // find recent miss events that include x/y coordinates
+  const misses = events.filter(e => e && e.miss && Number.isFinite(e.x) && Number.isFinite(e.y)).slice(-2000);
+  if (!misses.length) {
+    console.debug('[heatmap] no miss events with coordinates found, events count=', events.length);
+    return;
+  }
 
   const curW = canvas.width, curH = canvas.height;
   const baseR = Math.max(12, Math.floor(Math.min(curW, curH) * 0.04));
 
   misses.forEach(ev => {
-    const { x, y } = scalePoint(ev, curW, curH);
+    // If the event recorded original image dimensions (ev.w/ev.h), scale from that space.
+    // Otherwise assume ev.x/ev.y are already in CSS pixels relative to the current image rect.
+    let scaled = { x: ev.x || 0, y: ev.y || 0 };
+    try {
+      if (Number.isFinite(ev.w) && Number.isFinite(ev.h) && ev.w > 0 && ev.h > 0) {
+        scaled = scalePoint(ev, curW, curH);
+      } else {
+        // If ev.x/ev.y appear larger than canvas, try to normalize by image natural size heuristics
+        if (ev.x > curW || ev.y > curH) {
+          const rect = img.getBoundingClientRect();
+          const approxScaleX = rect.width && ev.w ? (curW / (ev.w || rect.width)) : 1;
+          const approxScaleY = rect.height && ev.h ? (curH / (ev.h || rect.height)) : 1;
+          scaled.x = Math.round((ev.x || 0) * approxScaleX);
+          scaled.y = Math.round((ev.y || 0) * approxScaleY);
+        }
+      }
+    } catch(e) { }
     const r = baseR;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const cx = scaled.x, cy = scaled.y;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0.0, 'rgba(255,0,0,0.35)');
     g.addColorStop(1.0, 'rgba(255,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
   });
 }

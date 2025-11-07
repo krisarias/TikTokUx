@@ -146,6 +146,15 @@ img#screen {
     border-radius: 6px !important;
     background: #fff !important;
   }
+
+  /* On mobile, hide the purple area overlays visually so they don't show the
+     purple boxes, but keep the overlay elements present so JS can use them
+     for hit detection (pointer-events are controlled by inline styles). */
+  .area-overlay {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
 }
 
 /* ---------- Desktop: pin controls to side ---------- */
