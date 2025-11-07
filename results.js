@@ -89,8 +89,38 @@
             const finished = t.finishedAt ? Date.parse(t.finishedAt) : (t.finished ? Date.parse(t.finished) : null);
             const durationMs = (Number.isFinite(started) && Number.isFinite(finished)) ? (finished - started) : (typeof t.durationMs === 'number' ? t.durationMs : null);
             const duration_s = (durationMs != null && !isNaN(durationMs)) ? Math.round(durationMs / 1000) : null;
-            return { index: (t.index ?? t.taskIndex ?? null), task: (t.task || t.title || null), startedAt: (t.startedAt || t.started || null), finishedAt: (t.finishedAt || t.finished || null), durationMs: durationMs, duration_s, raw: t };
+            const successVal = Object.prototype.hasOwnProperty.call(t, 'success') ? (t.success === true || t.success === 1) : null;
+            return { index: (t.index ?? t.taskIndex ?? null), task: (t.task || t.title || null), startedAt: (t.startedAt || t.started || null), finishedAt: (t.finishedAt || t.finished || null), durationMs: durationMs, duration_s, success: successVal, raw: t };
           });
+
+          // Attempt to extract per-task click/miss totals from counts.byTask if present
+          try {
+            const perTaskTotals = {}; // index -> total clicks
+            const perTaskMiss = {}; // index -> miss clicks
+            if (parsed.counts && typeof parsed.counts === 'object') {
+              for (const [variantKey, obj] of Object.entries(parsed.counts)) {
+                if (obj && typeof obj === 'object' && obj.byTask && typeof obj.byTask === 'object') {
+                  for (const [ti, areaObj] of Object.entries(obj.byTask)) {
+                    const idx = String(ti);
+                    perTaskTotals[idx] = perTaskTotals[idx] || 0;
+                    perTaskMiss[idx] = perTaskMiss[idx] || 0;
+                    for (const [areaK, areaV] of Object.entries(areaObj || {})) {
+                      const n = typeof areaV === 'number' ? areaV : 0;
+                      perTaskTotals[idx] += n;
+                      if (String(areaK).toLowerCase() === 'miss') perTaskMiss[idx] += n;
+                    }
+                  }
+                }
+              }
+            }
+            if (Object.keys(perTaskTotals).length) {
+              metrics.perTaskTotals = perTaskTotals;
+              metrics.perTaskMiss = perTaskMiss;
+            }
+          } catch(e) { /* ignore per-task extraction errors */ }
+
+          // count successful tasks if any
+          try { metrics.successfulTasks = metrics.tasks.filter(x => x.success === true).length; } catch(e){ metrics.successfulTasks = 0; }
 
           // Compute duration summaries: per-task durations (s), total, min, max
           try {
@@ -138,6 +168,14 @@
             } else {
               metrics.respuesta_final = null;
             }
+            // last run success if available (only consider `success` property)
+            if (Object.prototype.hasOwnProperty.call(chosenRun, 'success')){
+              metrics.lastTaskSuccess = (chosenRun.success === true || chosenRun.success === 1) ? true : (chosenRun.success === false || chosenRun.success === 0 ? false : null);
+            }
+          }
+          // missSummary per-task if present
+          if (parsed.missSummary && parsed.missSummary.byTaskIndex && typeof parsed.missSummary.byTaskIndex === 'object'){
+            metrics.missByTask = parsed.missSummary.byTaskIndex;
           }
         }
 
@@ -186,46 +224,122 @@
   }
 
   function renderRow(session){
-    const tr = document.createElement('tr');
-    // Prefer per-variant totals when available for a clearer summary
-    let countsSummary = '';
-    if(session.metrics.perVariantTotals && typeof session.metrics.perVariantTotals === 'object'){
-      countsSummary = Object.entries(session.metrics.perVariantTotals).map(([k,v])=>`${k}: ${v}`).join('; ');
-    } else {
-      countsSummary = summarizeCounts(session.metrics.counts);
+    // (counts summary column removed) — keep metric data in session.metrics if needed
+
+    const participant = session.metrics.participantName ? escapeHtml(String(session.metrics.participantName)) : '—';
+    const variant = escapeHtml(String(session.metrics.variant || '—'));
+  const totalDur = (typeof session.metrics.totalDurationS === 'number') ? String(session.metrics.totalDurationS) : '—';
+
+    // If tasks array exists, render one row per task (show 6 rows: one per expected task)
+    if (Array.isArray(session.metrics.tasks) && session.metrics.tasks.length) {
+      const tasksArr = session.metrics.tasks;
+        for (let i = 0; i < 6; i++) {
+        const t = tasksArr[i] || null;
+        const taskName = t && t.task ? escapeHtml(String(t.task)) : '—';
+        const duration = t && Number.isFinite(t.duration_s) ? String(t.duration_s) : '—';
+        const respRaw = t && t.raw && (t.raw.response ?? t.raw.respuesta ?? t.raw.answer) ? (t.raw.response ?? t.raw.respuesta ?? t.raw.answer) : null;
+        const displayedResp = respRaw == null ? '—' : (String(respRaw).length > 120 ? escapeHtml(String(respRaw).slice(0,120)) + '…' : escapeHtml(String(respRaw)));
+
+        // success display for this task
+        let successText = '—';
+        try {
+          if (t) {
+            // prefer explicit success flag when available
+            if (Object.prototype.hasOwnProperty.call(t, 'success') && t.success !== null) {
+              successText = (t.success === true) ? 'Sí' : (t.success === false ? 'No' : '—');
+            } else if (t.raw) {
+              // fallback heuristics: finishedAt or finished implies success
+              const raw = t.raw;
+              if (raw.finishedAt || raw.finished) {
+                successText = 'Sí';
+              } else if (raw.response && String(raw.response).trim().length) {
+                // if a response was recorded, treat as success (useful for final task)
+                successText = 'Sí';
+              }
+            }
+          }
+        } catch(e){}
+
+        const tr = document.createElement('tr');
+        // Determine clicks/miss for this task: prefer per-task totals when available
+        let taskClicks = '—';
+        let taskMiss = 0;
+        try {
+          if (session.metrics.perTaskTotals && Object.prototype.hasOwnProperty.call(session.metrics.perTaskTotals, String(i))) {
+            taskClicks = String(session.metrics.perTaskTotals[String(i)] || 0);
+          } else if (typeof session.metrics.total === 'number') {
+            // fallback to session total (string) when per-task not available
+            taskClicks = String(session.metrics.total);
+          }
+          if (session.metrics.perTaskMiss && Object.prototype.hasOwnProperty.call(session.metrics.perTaskMiss, String(i))) {
+            taskMiss = session.metrics.perTaskMiss[String(i)] || 0;
+          } else if (typeof session.metrics.miss === 'number') {
+            taskMiss = session.metrics.miss || 0;
+          }
+        } catch(e){ /* ignore and keep fallbacks */ }
+
+        tr.innerHTML = `
+          <td>${escapeHtml(session.name)}</td>
+          <td>${participant}</td>
+          <td>${variant}</td>
+          <td>${i+1}</td>
+          <td>${taskName}</td>
+          <td>${escapeHtml(String(successText))}</td>
+          <td>${escapeHtml(String(taskClicks))}</td>
+          <td>${escapeHtml(String(taskMiss || 0))}</td>
+          <td>${duration}</td>
+          <td>${totalDur}</td>
+          <td>
+            <span class="resp-snippet">${displayedResp}</span>
+            ${respRaw && String(respRaw).length > 120 ? '<button class="show-more-btn">Mostrar más</button>' : ''}
+            ${respRaw ? '<div class="resp-full" style="display:none">' + escapeHtml(String(respRaw)) + '</div>' : ''}
+          </td>
+          <td><button class="details-btn">Toggle</button>
+              <div class="details">${escapeHtml(JSON.stringify(session.data, null, 2))}</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      return;
     }
 
-  const participant = session.metrics.participantName ? escapeHtml(String(session.metrics.participantName)) : '—';
-  const lastTask = session.metrics.lastTaskName ? escapeHtml(String(session.metrics.lastTaskName)) : '—';
-    const lastDur = (typeof session.metrics.lastTaskDurationS === 'number') ? String(session.metrics.lastTaskDurationS) : '—';
-    const longest = session.metrics.longestTaskName ? escapeHtml(String(session.metrics.longestTaskName)) : '—';
-    const shortest = session.metrics.shortestTaskName ? escapeHtml(String(session.metrics.shortestTaskName)) : '—';
-    const totalDur = (typeof session.metrics.totalDurationS === 'number') ? String(session.metrics.totalDurationS) : '—';
-  const rawResp = (session.metrics.respuesta_final !== null && session.metrics.respuesta_final !== undefined) ? String(session.metrics.respuesta_final) : null;
-  const displayedResp = rawResp == null ? '—' : (rawResp.length > 120 ? escapeHtml(rawResp.slice(0, 120)) + '…' : escapeHtml(rawResp));
+    // Fallback: render a single row when no task runs present
+    const rawResp = (session.metrics.respuesta_final !== null && session.metrics.respuesta_final !== undefined) ? String(session.metrics.respuesta_final) : null;
+    const displayedResp = rawResp == null ? '—' : (rawResp.length > 120 ? escapeHtml(rawResp.slice(0, 120)) + '…' : escapeHtml(rawResp));
+    const tr = document.createElement('tr');
+    // determine last task success for fallback displays
+    let lastSuccessText = '—';
+    try {
+      if (session.metrics && typeof session.metrics.lastTaskSuccess !== 'undefined' && session.metrics.lastTaskSuccess !== null) {
+        lastSuccessText = session.metrics.lastTaskSuccess === true ? 'Sí' : (session.metrics.lastTaskSuccess === false ? 'No' : '—');
+      } else if (session.data && session.data.tasks && Array.isArray(session.data.tasks.runs) && session.data.tasks.runs.length) {
+        const lr = session.data.tasks.runs[session.data.tasks.runs.length - 1];
+        if (lr && (lr.finishedAt || lr.finished)) lastSuccessText = 'Sí';
+        else if (lr && lr.response && String(lr.response).trim().length) lastSuccessText = 'Sí';
+      }
+
+    } catch(e){}
 
     tr.innerHTML = `
       <td>${escapeHtml(session.name)}</td>
       <td>${participant}</td>
-      <td>${escapeHtml(String(session.metrics.variant || '—'))}</td>
+      <td>${variant}</td>
+      <td>—</td>
+      <td>—</td>
+  <td>${lastSuccessText}</td>
       <td>${escapeHtml(String(session.metrics.total))}</td>
       <td>${escapeHtml(String(session.metrics.miss || 0))}</td>
-      <td>${lastTask}</td>
-      <td>${lastDur}</td>
-      <td>${longest}</td>
-      <td>${shortest}</td>
+      <td>${escapeHtml(String(session.metrics.lastTaskDurationS != null ? session.metrics.lastTaskDurationS : '—'))}</td>
       <td>${totalDur}</td>
       <td>
         <span class="resp-snippet">${displayedResp}</span>
         ${rawResp && rawResp.length > 120 ? '<button class="show-more-btn">Mostrar más</button>' : ''}
         ${rawResp ? '<div class="resp-full" style="display:none">' + escapeHtml(rawResp) + '</div>' : ''}
       </td>
-      <td>${escapeHtml(countsSummary)}</td>
       <td><button class="details-btn">Toggle</button>
           <div class="details">${escapeHtml(JSON.stringify(session.data, null, 2))}</div>
       </td>
     `;
-
     tbody.appendChild(tr);
   }
 
@@ -353,20 +467,59 @@
     try {
       if (!sessions.length) { alert('No sessions to export'); return; }
 
-      const rows = sessions.map(s => ({
-        File: s.name,
-        ParticipantName: s.metrics.participantName || '',
-        Variant: s.metrics.variant || '',
-        TotalClicks: s.metrics.total || '',
-        Missclicks: s.metrics.miss || '',
-        LastTask: s.metrics.lastTaskName || '',
-        LastTaskDuration_s: s.metrics.lastTaskDurationS != null ? s.metrics.lastTaskDurationS : '',
-        LongestTask: s.metrics.longestTaskName || '',
-        ShortestTask: s.metrics.shortestTaskName || '',
-        TotalDuration_s: s.metrics.totalDurationS != null ? s.metrics.totalDurationS : '',
-        FinalResponse: s.metrics.respuesta_final != null ? s.metrics.respuesta_final : '',
-        CountsSummary: (typeof s.metrics.counts === 'object') ? JSON.stringify(s.metrics.counts) : (s.metrics.counts || '')
-      }));
+      const rows = [];
+      sessions.forEach(s => {
+        const base = {
+          File: s.name,
+          ParticipantName: s.metrics.participantName || '',
+          Variant: s.metrics.variant || '',
+          TotalClicks: s.metrics.total || '',
+          Missclicks: s.metrics.miss || '',
+          TotalDuration_s: s.metrics.totalDurationS != null ? s.metrics.totalDurationS : ''
+        };
+
+        // If session has per-task runs, export one row per task (6 rows expected)
+        if (Array.isArray(s.metrics.tasks) && s.metrics.tasks.length) {
+          const tasksArr = s.metrics.tasks;
+          for (let i = 0; i < 6; i++) {
+            const t = tasksArr[i] || null;
+            const taskName = t && t.task ? t.task : '';
+            const taskDuration = t && Number.isFinite(t.duration_s) ? t.duration_s : '';
+            const taskResp = t && t.raw && (t.raw.response ?? t.raw.respuesta ?? t.raw.answer) ? (t.raw.response ?? t.raw.respuesta ?? t.raw.answer) : '';
+            const taskSuccess = (t && Object.prototype.hasOwnProperty.call(t, 'success')) ? (t.success === true || t.success === 1 ? true : (t.success === false || t.success === 0 ? false : null)) : null;
+            // derive per-task clicks and miss from session.metrics.perTaskTotals / perTaskMiss when available
+            let taskClicksExport = '';
+            let taskMissExport = '';
+            try {
+              if (s.metrics && s.metrics.perTaskTotals && Object.prototype.hasOwnProperty.call(s.metrics.perTaskTotals, String(i))) taskClicksExport = s.metrics.perTaskTotals[String(i)];
+              else taskClicksExport = s.metrics && typeof s.metrics.total === 'number' ? s.metrics.total : '';
+              if (s.metrics && s.metrics.perTaskMiss && Object.prototype.hasOwnProperty.call(s.metrics.perTaskMiss, String(i))) taskMissExport = s.metrics.perTaskMiss[String(i)];
+              else taskMissExport = s.metrics && typeof s.metrics.miss === 'number' ? s.metrics.miss : '';
+            } catch(e){ }
+
+            rows.push(Object.assign({}, base, {
+              TaskNumber: i + 1,
+              TaskName: taskName,
+              TaskDuration_s: taskDuration,
+              TaskResponse: taskResp,
+              TaskSuccess: taskSuccess,
+              TaskTotalClicks: taskClicksExport,
+              TaskMissclicks: taskMissExport
+            }));
+          }
+        } else {
+          // Fallback: single row per file
+          rows.push(Object.assign({}, base, {
+            TaskNumber: '',
+            TaskName: '',
+            TaskDuration_s: '',
+            TaskResponse: s.metrics.respuesta_final != null ? s.metrics.respuesta_final : '',
+            TaskSuccess: (s.metrics.lastTaskSuccess === true) ? true : (s.metrics.lastTaskSuccess === false ? false : null),
+            TaskTotalClicks: s.metrics && typeof s.metrics.total === 'number' ? s.metrics.total : '',
+            TaskMissclicks: s.metrics && typeof s.metrics.miss === 'number' ? s.metrics.miss : ''
+          }));
+        }
+      });
 
       const filename = 'sessions-' + (new Date()).toISOString().slice(0,19).replace(/[:T]/g,'-') + '.xlsx';
 

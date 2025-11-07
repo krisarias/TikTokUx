@@ -288,27 +288,57 @@ function readCounts() {
 function saveCounts(obj) { localStorage.setItem(COUNTS_KEY, JSON.stringify(obj)); }
 
 function incrementCount(areaId) {
-  // Only count clicks/misses while a task run is active (started and not finished).
-  // Allow counting for special task events (ids starting with 'task-').
+  // Previous behavior returned early when no active run was found which caused
+  // some missclicks to be ignored or assigned incorrectly when currentIndex
+  // advanced before the click arrived. Updated behavior:
+  // - Always increment the global/session-level counts[v][areaId]
+  // - Increment counts[v].byTask[idx] only when we can reliably detect an
+  //   active run (a run with startedAt && !finishedAt). This assigns per-task
+  //   clicks/misses to the run that was actually active at the time.
   try {
-    const aid = String(areaId || '');
-    if (!aid.startsWith('task-')) {
-      const state = loadTaskState();
-      const idx = state?.currentIndex ?? 0;
-      const run = state?.runs && state.runs[idx];
-      if (!run || !run.startedAt || run.finishedAt) {
-        // Not currently recording; return current counts without incrementing
-        return readCounts();
-      }
-    }
-  } catch(e) {}
+    const v = localStorage.getItem(VAR_KEY) || assignVariant();
+    const counts = readCounts();
+    if (!counts[v]) counts[v] = {};
 
-  const v = localStorage.getItem(VAR_KEY) || assignVariant();
-  const counts = readCounts();
-  if (!counts[v]) counts[v] = {};
-  counts[v][areaId] = (counts[v][areaId] || 0) + 1;
-  saveCounts(counts);
-  return counts;
+    // increment global area-level count
+    counts[v][areaId] = (counts[v][areaId] || 0) + 1;
+
+    // Try to find an active run (startedAt && not finishedAt). Prefer scanning
+    // runs array instead of trusting currentIndex so we assign to the run that
+    // was actually active.
+    try {
+      const state = loadTaskState();
+      let activeIdx = null;
+      if (state && Array.isArray(state.runs)) {
+        for (let k = 0; k < state.runs.length; k++) {
+          const r = state.runs[k];
+          if (r && r.startedAt && !r.finishedAt) { activeIdx = k; break; }
+        }
+      }
+
+      // If no active run found, fall back to state.currentIndex only if that
+      // run appears to be currently ongoing (started && not finished). This
+      // avoids assigning clicks to a next index that was pre-incremented.
+      if (activeIdx === null && state && typeof state.currentIndex !== 'undefined' && state.currentIndex !== null) {
+        const candidate = state.runs && state.runs[state.currentIndex];
+        if (candidate && candidate.startedAt && !candidate.finishedAt) activeIdx = state.currentIndex;
+      }
+
+      if (activeIdx !== null && typeof activeIdx !== 'undefined') {
+        if (!counts[v].byTask) counts[v].byTask = {};
+        const byTask = counts[v].byTask;
+        const key = String(activeIdx);
+        if (!byTask[key]) byTask[key] = {};
+        byTask[key][areaId] = (byTask[key][areaId] || 0) + 1;
+      }
+    } catch(e) { /* ignore per-task bookkeeping errors */ }
+
+    saveCounts(counts);
+    return counts;
+  } catch (e) {
+    // On unexpected error return existing counts as a best effort
+    try { return readCounts(); } catch(x){ return { A:{}, B:{} }; }
+  }
 }
 
 // Record an event to the events log (keeps recent history); also used for export
@@ -498,6 +528,52 @@ function startTaskAtIndex(idx) {
   } catch(e) {}
 }
 
+// Determine whether a task run should be considered a success based on events recorded
+// Rules (can be extended):
+// - Task 0 (index 0): success if visited TMsj (A) or CMsj (B)
+// - Task 1 (index 1): success if visited TPersonas (A) or C.NuevosSeguidores (B)
+function evaluateTaskSuccess(taskIndex) {
+  try {
+    const events = readEvents() || [];
+    // consider only events recorded during the same taskIndex
+    const evs = events.filter(e => (e && (Number(e.taskIndex) === Number(taskIndex))));
+
+    const seenBasenames = new Set();
+    evs.forEach(e => {
+      try {
+        const path = (e.screen || e.target || '');
+        const bn = String(path).split('/').pop() || '';
+        if (bn) seenBasenames.add(bn.toLowerCase());
+      } catch(e){}
+    });
+
+    const has = (names) => names.some(n => seenBasenames.has(n.toLowerCase()));
+
+    const idx = Number(taskIndex);
+    // Task 0: mensajes — TMsj (A) or CMsj (B)
+    if (idx === 0) return has(['TMsj.png','CMsj.png']);
+    // Task 1: nuevos seguidores — TPersonas (A) or C.NuevosSeguidores (B)
+    if (idx === 1) return has(['TPersonas.png','C.NuevosSeguidores.png']);
+    // Task 2: respuestas a tus comentarios — TActv (A) or C.Actividad (B)
+    if (idx === 2) return has(['TActv.png','C.Actividad.png']);
+    // Task 3: resultado de una denuncia — TSysDen (A) or CSysDen (B)
+    if (idx === 3) return has(['TSysDen.png','CSysDen.png']);
+    // Task 4: cambiar ajustes de notificaciones — TConfig (A) or CConfig (B)
+    if (idx === 4) return has(['TConfig.png','CConfig.png']);
+    // Task 5: respuesta final (escribir) — success if run has a non-empty response
+    if (idx === 5) {
+      try {
+        const state = loadTaskState();
+        const run = state && state.runs && state.runs[idx];
+        if (run && run.response && String(run.response).trim().length) return true;
+      } catch(e){}
+      return false;
+    }
+
+    return false;
+  } catch(e) { return false; }
+}
+
 // Prevent rapid double-activations of start/end task actions and provide
 // a small visual disable to make the interaction feel more deliberate.
 function setTaskButtonsDisabled(disabled) {
@@ -634,7 +710,16 @@ function getMissSummary() {
       const key = (basename || 'unknown').toString();
       byScreen[key] = (byScreen[key] || 0) + 1;
     });
-    return { total: misses.length, byScreen };
+    // Also compute misses by taskIndex (if events include taskIndex)
+    const byTaskIndex = {};
+    misses.forEach(ev => {
+      try {
+        const ti = (typeof ev.taskIndex !== 'undefined' && ev.taskIndex !== null) ? String(ev.taskIndex) : 'unassigned';
+        byTaskIndex[ti] = (byTaskIndex[ti] || 0) + 1;
+      } catch(e) {}
+    });
+
+    return { total: misses.length, byScreen, byTaskIndex };
   } catch(e) { return { total: 0, byScreen: {} }; }
 }
 
@@ -739,7 +824,10 @@ function exportExperimentJSON() {
     counts,
     perVariantTotals,
     missSummary,
-    tasks: runs,
+    tasks: {
+      currentIndex: state?.currentIndex ?? 0,
+      runs
+    },
     events
   };
 
