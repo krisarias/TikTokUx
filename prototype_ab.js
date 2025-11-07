@@ -218,13 +218,19 @@ function incrementCount(areaId) {
 }
 
 // Record an event to the events log (keeps recent history); also used for export
+// en recordEvent(...)
 function recordEvent(areaId, target, isMiss, coords) {
   try {
     const raw = localStorage.getItem(EVENTS_KEY);
     const events = raw ? JSON.parse(raw) : [];
-    // capture current screen at the time of the event for better export
+
+    // toma taskIndex actual (si existe)
+    let taskIndex = null;
+    try { taskIndex = (loadTaskState()?.currentIndex ?? null); } catch(e){}
+
     const img = getScreenImg();
     const screenPath = img ? decodeURIComponent(img.getAttribute('src') || '') : null;
+
     const ev = {
       id: areaId,
       target: target || null,
@@ -232,6 +238,7 @@ function recordEvent(areaId, target, isMiss, coords) {
       miss: !!isMiss,
       ts: isoTimestamp(),
       screen: screenPath,
+      taskIndex,                         // ← NUEVO
       ...(coords ? { x: coords.x, y: coords.y, w: coords.w, h: coords.h } : {})
     };
     events.push(ev);
@@ -240,6 +247,7 @@ function recordEvent(areaId, target, isMiss, coords) {
     return ev;
   } catch { return null; }
 }
+
 
 // --------- Task state helpers ----------
 function loadTaskState() {
@@ -343,8 +351,24 @@ function showFinalResponseModal(taskIndex) {
       saveTaskState(state);
       pushTaskEvent('response', taskIndex, { response: resp.value });
     } catch(e){}
+    try {
+      // If on mobile, automatically export results (including the just-saved comment)
+      if (typeof isMobileDevice === 'function' && isMobileDevice()) {
+        try { exportCounts(); } catch(e){}
+        try { alert('envia esto a jimena o krisly'); } catch(e){}
+      }
+    } catch(e){}
     modal.remove();
   });
+}
+
+// Helper: detect mobile/touch or small screen devices
+function isMobileDevice() {
+  try {
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0);
+    const smallScreen = (window.innerWidth || document.documentElement.clientWidth || 0) <= 768;
+    return isTouch || smallScreen;
+  } catch(e) { return false; }
 }
 
 // helper to mark a task as started (used by UI helpers)
@@ -467,7 +491,11 @@ function getMissSummary() {
 function exportCounts() {
   const data = readCounts();
   const missSummary = getMissSummary();
-  const blob = new Blob([JSON.stringify({ exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: data, missSummary }, null, 2)], { type: 'application/json' });
+  // include events and task state so exported file contains timestamps and task metadata
+  const events = readEvents();
+  const tasks = loadTaskState();
+  const exported = { exportedAt: isoTimestamp(), exportedAtMs: Date.now(), variant: localStorage.getItem(VAR_KEY), counts: data, events: events, missSummary, tasks };
+  const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -477,6 +505,75 @@ function exportCounts() {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+
+function exportExperimentJSON() {
+  const variant = localStorage.getItem(VAR_KEY) || assignVariant();
+  const counts  = readCounts();
+  const events  = readEvents();
+  const missSummary = getMissSummary();
+
+  // reconstruye runs + duraciones
+  const state = loadTaskState();
+  const runs = (state?.runs || []).map(r => {
+    const started = r.startedAt ? Date.parse(r.startedAt) : null;
+    const finished = r.finishedAt ? Date.parse(r.finishedAt) : null;
+    return {
+      index: r.taskIndex,
+      task: r.task,
+      startedAt: r.startedAt || null,
+      finishedAt: r.finishedAt || null,
+      durationMs: (started && finished) ? (finished - started) : null,
+      response: r.response || null,
+      startNotes: r.startNotes || null,
+      success: Boolean(finished) // puedes afinar esto si exiges “evento objetivo”
+    };
+  });
+
+  // metadatos de sesión
+  const meta = {
+    sessionId: localStorage.getItem('tt_session_id') || (function(){
+      const id = 'sess_' + Math.random().toString(36).slice(2);
+      try { localStorage.setItem('tt_session_id', id); } catch(e){}
+      return id;
+    })(),
+    participantId: localStorage.getItem('tt_participant_id') || null,
+    assignedVariantAt: localStorage.getItem('tt_variant_assigned_at') || null,
+    userAgent: navigator.userAgent,
+    isTouch: (('ontouchstart' in window) || (navigator.maxTouchPoints>0)),
+    viewport: { w: window.innerWidth, h: window.innerHeight },
+    schemaVersion: '2',
+    prototypeVersion: (window.__PROTOTYPE_VERSION__ || null)
+  };
+
+  // KPIs agregados rápidos
+  const perVariantTotals = {};
+  for (const [k,obj] of Object.entries(counts||{})) {
+    let s=0; if (obj && typeof obj==='object') {
+      for (const [kk,v] of Object.entries(obj)) if (kk!=='miss' && typeof v==='number') s+=v;
+    }
+    perVariantTotals[k]=s;
+  }
+
+  const payload = {
+    exportedAt: isoTimestamp(),
+    variant,
+    meta,
+    counts,
+    perVariantTotals,
+    missSummary,
+    tasks: runs,
+    events
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'experiment-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 
 // ------------ Navigation + tracking --------------
 function setScreen(path) {
@@ -945,10 +1042,17 @@ function createAreaOverlays() {
         const bbox = computeBBoxFromCoords(shape, coords);
         if (!bbox) { area.style.pointerEvents = 'none'; return; }
 
-        const left   = Math.round(bbox.x * scaleX);
-        const top    = Math.round(bbox.y * scaleY);
-        const width  = Math.max(2, Math.round(bbox.w * scaleX));
-        const height = Math.max(2, Math.round(bbox.h * scaleY));
+        let left   = Math.round(bbox.x * scaleX);
+        let top    = Math.round(bbox.y * scaleY);
+        let width  = Math.max(2, Math.round(bbox.w * scaleX));
+        let height = Math.max(2, Math.round(bbox.h * scaleY));
+
+        // On mobile/small screens, expand the overlay hit area to make taps easier
+        const pad = isMobileDevice() ? Math.max(10, Math.round(Math.min(rect.width, rect.height) * 0.03)) : 0;
+        left = Math.max(0, left - pad);
+        top = Math.max(0, top - pad);
+        width = Math.min(Math.round(rect.width) - left, width + pad * 2);
+        height = Math.min(Math.round(rect.height) - top, height + pad * 2);
 
         const ov = document.createElement('div');
         ov.className = 'area-overlay ' + (bbox.shape === 'circle' ? 'circle' : (bbox.shape === 'poly' ? 'poly' : 'rect'));
@@ -956,17 +1060,42 @@ function createAreaOverlays() {
         ov.style.top = top + 'px';
         ov.style.width = width + 'px';
         ov.style.height = height + 'px';
-        ov.style.pointerEvents = 'none';   // no bloquear clics al <area>
+        // On mobile allow the overlay to receive pointer events so taps hit reliably; on desktop keep it visual-only
+        const mobile = isMobileDevice();
+        ov.style.pointerEvents = mobile ? 'auto' : 'none';
         ov.style.position = 'absolute';
         ov.style.zIndex = '2';
 
         ov.setAttribute('data-area-id', area.id || '');
         ov.title = area.getAttribute('title') || area.getAttribute('alt') || area.id || '';
 
+        // If on mobile, route overlay taps to the original area handler so behavior is identical
+        if (mobile) {
+          ov.addEventListener('click', function(evt){
+            try {
+              const aid = this.getAttribute('data-area-id');
+              const areaEl = document.querySelector('map#phone-map area[id="' + aid + '"]');
+              if (areaEl) {
+                // Prefer calling the wired handler if present
+                if (typeof areaEl.__prototypeClickHandler === 'function') {
+                  areaEl.__prototypeClickHandler.call(areaEl, evt);
+                } else {
+                  // fallback: dispatch a synthetic click
+                  areaEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+                }
+              }
+            } catch(e){}
+          });
+        }
+
         container.appendChild(ov);
 
-        // Habilitar el <area> si se dibujó overlay
-        area.style.pointerEvents = 'auto';
+        // Habilitar el <area> si se dibujó overlay (keep disabled on mobile to avoid double events)
+        if (!mobile) {
+          area.style.pointerEvents = 'auto';
+        } else {
+          area.style.pointerEvents = 'none';
+        }
         area.style.cursor = 'pointer';
 
         if (window.__showClickables) ov.classList.add('debug-visible');
@@ -976,6 +1105,7 @@ function createAreaOverlays() {
     // Reconciliar: deshabilitar áreas sin overlay.
     // Forzar habilitado de area-CConfig si está activa (en CNotfSys/CSysDen).
     try {
+      const mobile = isMobileDevice();
       areas.forEach(a => {
         const hasOv = !!container.querySelector('.area-overlay[data-area-id="' + a.id + '"]');
         let shouldEnable = hasOv && isAreaActive(a.id);
@@ -984,8 +1114,14 @@ function createAreaOverlays() {
           shouldEnable = true;
         }
 
-        a.style.pointerEvents = shouldEnable ? 'auto' : 'none';
-        a.style.cursor = shouldEnable ? 'pointer' : 'default';
+        // On mobile we let overlays handle pointer events (areas stay non-interactive to avoid double taps)
+        if (mobile) {
+          a.style.pointerEvents = 'none';
+          a.style.cursor = shouldEnable ? 'pointer' : 'default';
+        } else {
+          a.style.pointerEvents = shouldEnable ? 'auto' : 'none';
+          a.style.cursor = shouldEnable ? 'pointer' : 'default';
+        }
       });
     } catch(e) {}
   } catch(e) {}
@@ -1130,7 +1266,9 @@ function updateCountsUI() {
       d.style.padding = '6px 8px';
       d.style.borderBottom = '1px solid #f1f5f9';
       d.style.fontSize = '13px';
-      d.innerHTML = `<strong>${ev.id}</strong> <span class="muted">(${ev.variant})</span><div class="muted">${ev.ts} ${ev.miss?'<span style="color:#c00">miss</span>':''}</div>`;
+      // show ISO timestamp and epoch ms for each click
+      const ms = ev.ts_ms ? (' — ' + ev.ts_ms + ' ms') : '';
+      d.innerHTML = `<strong>${ev.id}</strong> <span class="muted">(${ev.variant})</span><div class="muted">${ev.ts}${ms} ${ev.miss?'<span style="color:#c00">miss</span>':''}</div>`;
       el.appendChild(d);
     });
   }
@@ -1284,7 +1422,8 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     const counts = readCounts();
     const events = readEvents();
     const missSummary = getMissSummary();
-    const data = { exportedAt: isoTimestamp(), variant: localStorage.getItem(VAR_KEY), counts: counts, events: events, missSummary };
+    const tasks = loadTaskState();
+    const data = { exportedAt: isoTimestamp(), exportedAtMs: Date.now(), variant: localStorage.getItem(VAR_KEY), counts: counts, events: events, missSummary, tasks };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
@@ -1294,9 +1433,10 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   if (exportCSV) exportCSV.addEventListener('click', () => {
     const events = readEvents();
     if (!events.length) { alert('No events to export'); return; }
-    const rows = [['ts','variant','id','target','miss','x','y','w','h']];
+    // include ts_ms column (epoch ms) to capture exact click time
+    const rows = [['ts','ts_ms','variant','id','target','miss','x','y','w','h']];
     events.forEach(ev => rows.push([
-      ev.ts, ev.variant, ev.id, ev.target || '',
+      ev.ts, (ev.ts_ms ?? ''), ev.variant, ev.id, ev.target || '',
       ev.miss ? '1' : '0',
       (ev.x ?? ''), (ev.y ?? ''), (ev.w ?? ''), (ev.h ?? '')
     ]));
