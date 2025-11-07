@@ -1866,6 +1866,8 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   const exportCountsBtn = document.getElementById('exportCounts'); if (exportCountsBtn) exportCountsBtn.addEventListener('click', exportCounts);
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Treat each page load as a new session: clear any previously persisted variant
+    try { localStorage.removeItem(VAR_KEY); localStorage.removeItem('tt_variant_assigned_at'); } catch(e){}
     const v = assignVariant();
     const label = document.getElementById('variant-label'); if (label) label.textContent = v;
 
