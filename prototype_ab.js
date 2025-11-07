@@ -692,13 +692,15 @@ const AREA_RULES = {
   'area-back-msj': { disabledOn: ['TMain.png','CMain.png'] },
   'area-msj2': { enabledOn: ['TMain.png'] },
   'area-tconfigmsj': { enabledOn: ['TMain.png'] },
-  'area-tconfig': { enabledOn: ['TNotfSys.png'] },
+  'area-tconfig': { enabledOn: ['TNotfSys.png','TSysDen.png'] },
   'area-tactfltrs': { enabledOn: ['TActv.png'] },
   // ADenuncias (A variant) should only be active on TNotfSys
   'area-adenuncias': { enabledOn: ['TNotfSys.png'] },
-  'area-bdenuncias': { enabledOn: ['CNotfSys.png'] },
+  'area-bdenuncias': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
   // B/C variant denuncias (CNotfSys) handled separately
   'area-actualizaciones': { enabledOn: ['TSysDen.png'] },
+  'area-actualcuenta': { enabledOn: ['CSysDen.png'] },
+  'area-rueda': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
   // CMain-specific hotspots
   'area-cmain-bfrancini': { enabledOn: ['CMain.png'] },
   'area-cmain-newfollowers': { enabledOn: ['CMain.png'] },
@@ -706,8 +708,6 @@ const AREA_RULES = {
   'area-cmain-denuncias': { enabledOn: ['CMain.png'] },
   'area-cmain-solicitudmsj': { enabledOn: ['CMain.png'] },
   'area-cmain-activity': { enabledOn: ['CMain.png'] },
-  // CConfig should only be active when viewing CNotfSys or CSysDen
-  'area-cconfig': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
   // Barra de pestañas de prototipoA (usa basenames canónicos)
   'area-seguidores': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','C.Actividad.png','CNotfSys.png','CMain.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMsj.png'] },
   'area-actividad': { disabledOn: ['TActvFltrs.png','TConfig.png','TConfigMsj.png','TMsj.png','CActvFltrs.png','CConfig.png','CConfigMsj.png','C.Actividad.png','CNotfSys.png','CMain.png','C.NuevosSeguidores.png','CSolicitudMensaje.png','CSysDen.png','CMsj.png'] },
@@ -740,14 +740,34 @@ function updateAreasActive() {
   try {
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
     areas.forEach(area => {
-      const el = document.getElementById(area.id);
-      if (!el) return;
       const active = isAreaActive(area.id);
-      el.style.pointerEvents = active ? 'auto' : 'none';
-      el.style.cursor = active ? 'pointer' : 'default';
+
+      // Guarda coords originales una sola vez
+      if (!area.__origCoords) {
+        area.__origCoords = area.getAttribute('coords') || '';
+      }
+
+      // Si NO está activa: sácala del hit-test del <map>
+      if (!active) {
+        // 1) deshabilita clicks por si el navegador respeta pointer-events
+        area.style.pointerEvents = 'none';
+        area.style.cursor = 'default';
+        // 2) sácala del hit-test seguro en todos los navegadores
+        if (area.getAttribute('coords')) {
+          area.setAttribute('coords', ''); // sin coords = no colisiona
+        }
+      } else {
+        // Activa: restaura coords y habilita
+        if (!area.getAttribute('coords') && area.__origCoords) {
+          area.setAttribute('coords', area.__origCoords);
+        }
+        area.style.pointerEvents = 'auto';
+        area.style.cursor = 'pointer';
+      }
     });
   } catch(e) {}
 }
+
 
 // Any-touch behaviours (TConfigMsj => back, TActvFltrs => go to TActv)
 window.__anyTouchHandler = window.__anyTouchHandler || null;
@@ -880,45 +900,48 @@ function createAreaOverlays() {
   try {
     const img = getScreenImg();
     if (!img) return;
+
     const container = img.closest('.screen-wrap') || document.querySelector('.screen-wrap');
     if (!container) return;
-    // remove any previous overlays
+
+    // Limpia overlays previos
     removeAreaOverlays();
 
     const naturalW = img.naturalWidth || img.width || img.clientWidth;
     const naturalH = img.naturalHeight || img.height || img.clientHeight;
-    // If image has no natural size yet, disable all areas to avoid accidental clicks
+
+    // Si aún no hay tamaño natural, deshabilita todo para evitar clics fantasma
     const areasAll = Array.from(document.querySelectorAll('map#phone-map area'));
     areasAll.forEach(a => { try { a.style.pointerEvents = 'none'; } catch(e){} });
-    if (!naturalW || !naturalH) {
-      return;
-    }
+    if (!naturalW || !naturalH) return;
 
     const rect = img.getBoundingClientRect();
     const scaleX = rect.width / naturalW;
     const scaleY = rect.height / naturalH;
 
     const areas = Array.from(document.querySelectorAll('map#phone-map area'));
-    // Before creating overlays, disable all areas; we'll re-enable only those
-    // for which we create a visible overlay (prevents intermittent clickable zones).
+
+    // Deshabilitar todo antes de crear overlays
     areas.forEach(a => { try { a.style.pointerEvents = 'none'; } catch(e){} });
+
+    // Crear overlays visibles para las áreas activas con coords válidas
     areas.forEach(area => {
       try {
-        // Skip overlays for areas that are not active on the current screen
         if (!isAreaActive(area.id)) return;
-        const coords = (area.getAttribute('coords') || '').split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-        // If coords are missing or invalid, ensure the area is not clickable
-        try { if (!coords.length) { area.style.pointerEvents = 'none'; return; } } catch(e) {}
+
+        const coords = (area.getAttribute('coords') || '')
+          .split(',')
+          .map(s => Number(s.trim()))
+          .filter(n => !isNaN(n));
+        if (!coords.length) { area.style.pointerEvents = 'none'; return; }
+
         const shape = (area.getAttribute('shape') || 'rect').toLowerCase();
         const bbox = computeBBoxFromCoords(shape, coords);
-        // If we couldn't compute a bbox, disable clicks on this area to avoid
-        // invisible-but-interactive regions causing unexpected navigations.
-        try { if (!bbox) { area.style.pointerEvents = 'none'; return; } } catch(e) {}
+        if (!bbox) { area.style.pointerEvents = 'none'; return; }
 
-        // scale
-        const left = Math.round(bbox.x * scaleX);
-        const top = Math.round(bbox.y * scaleY);
-        const width = Math.max(2, Math.round(bbox.w * scaleX));
+        const left   = Math.round(bbox.x * scaleX);
+        const top    = Math.round(bbox.y * scaleY);
+        const width  = Math.max(2, Math.round(bbox.w * scaleX));
         const height = Math.max(2, Math.round(bbox.h * scaleY));
 
         const ov = document.createElement('div');
@@ -927,27 +950,41 @@ function createAreaOverlays() {
         ov.style.top = top + 'px';
         ov.style.width = width + 'px';
         ov.style.height = height + 'px';
+        ov.style.pointerEvents = 'none';   // no bloquear clics al <area>
+        ov.style.position = 'absolute';
+        ov.style.zIndex = '2';
+
         ov.setAttribute('data-area-id', area.id || '');
         ov.title = area.getAttribute('title') || area.getAttribute('alt') || area.id || '';
-        // append overlay above image within screen-wrap
+
         container.appendChild(ov);
-        // ensure the underlying <area> remains clickable if overlay was built
-        try { area.style.pointerEvents = 'auto'; } catch(e) {}
-        // If debug mode is enabled, make overlays more visible
-        try { if (window.__showClickables) ov.classList.add('debug-visible'); } catch(e) {}
-      } catch (e) { /* per-area */ }
+
+        // Habilitar el <area> si se dibujó overlay
+        area.style.pointerEvents = 'auto';
+        area.style.cursor = 'pointer';
+
+        if (window.__showClickables) ov.classList.add('debug-visible');
+      } catch (e) { /* por área */ }
     });
-    // Reconcile: ensure any area without a created overlay stays disabled
+
+    // Reconciliar: deshabilitar áreas sin overlay.
+    // Forzar habilitado de area-CConfig si está activa (en CNotfSys/CSysDen).
     try {
       areas.forEach(a => {
-        try {
-          const hasOv = !!container.querySelector('.area-overlay[data-area-id="' + a.id + '"]');
-          if (!hasOv) a.style.pointerEvents = 'none';
-        } catch(e){}
+        const hasOv = !!container.querySelector('.area-overlay[data-area-id="' + a.id + '"]');
+        let shouldEnable = hasOv && isAreaActive(a.id);
+
+        if ((a.id || '').toLowerCase() === 'area-cconfig' && isAreaActive(a.id)) {
+          shouldEnable = true;
+        }
+
+        a.style.pointerEvents = shouldEnable ? 'auto' : 'none';
+        a.style.cursor = shouldEnable ? 'pointer' : 'default';
       });
     } catch(e) {}
   } catch(e) {}
 }
+
 
 // Utility: explicitly reconcile areas to overlays (call when needed)
 function reconcileAreasWithOverlays() {

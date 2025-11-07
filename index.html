@@ -19,30 +19,28 @@
         <map name="phone-map" id="phone-map">
           <!-- Back button-->
           <area id="area-back-msj" shape="rect" coords="12,63,34,88" href="#" alt="back" title="back" data-action="goBack">
-         <!--Barra de pestañas en Main A (Tratamiento)-->
+         <!--Prototipo A pestañas Main-->
           <area id="area-main" target="" alt="Main"      title="Main"            href="#" coords="12,100,76,120" shape="rect" data-handler="global"               data-target="images/A.Tratamiento/TMain.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
           <area id="area-seguidores" target="" alt="Seguidores" title="Seguidores" href="#" coords="84,97,164,122" shape="rect" data-handler="global"             data-target="images/A.Tratamiento/TPersonas.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
           <area id="area-actividad"  target="" alt="Actividad"  title="Actividad"       href="#" coords="175,98,233,117" shape="rect" data-handler="global"       data-target="images/A.Tratamiento/TActv.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
           <area id="area-notifsistema" target="" alt="NotifSistema" title="NotifSistema" href="#" coords="250,98,383,116" shape="rect" data-handler="global"      data-target="images/A.Tratamiento/TNotfSys.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
-          <!-- -->
+          <!-- Prototipo A-->
           <area id="area-AFrancini" alt="AFrancini" title="AFrancini" href="#" coords="18,534,375,592" shape="rect" data-handler="tmsj"                           data-target="/msj">
-          <area id="area-Adenuncias" target="" alt="ADenuncias" title="ADenuncias" href="#" coords="61,107,153,132" shape="rect" data-handler="global"            data-target="images/A.Tratamiento/TSysDen.png" data-enabled="TNotfSys.png">
+          <area id="area-Adenuncias" target="" alt="ADenuncias" title="ADenuncias" href="#" coords="57,144,149,169"  shape="rect" data-handler="global"            data-target="images/A.Tratamiento/TSysDen.png" data-enabled="TNotfSys.png">
           <area id="area-actualizaciones" target="" alt="Actualizaciones" title="Actualizaciones" href="#" coords="161,143,370,170" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TNotfSys.png" data-enabled="TSysDen.png">
-          <area id="area-TConfig"    target="" alt="TConfig" title="TConfig" href="#" coords="352,59,376,80" shape="rect" data-handler="enabled"                     data-target="images/A.Tratamiento/TConfig.png" data-enabled="TNotfSys.png">
+          <area id="area-TConfig"    target="" alt="TConfig" title="TConfig" href="#" coords="352,59,376,80" shape="rect" data-handler="enabled"                     data-target="images/A.Tratamiento/TConfig.png" data-enabled="TNotfSys.png|TSysDen.png">
           <area id="area-TActFltrs"  target="" alt="TActFltrs" title="TActFltrs" href="#" coords="244,58,262,76" shape="rect" data-handler="enabled"               data-target="images/A.Tratamiento/TActvFltrs.png" data-enabled="TActv.png">
           <area id="area-TConfigMsj" target="" alt="TConfigMsj" title="TConfigMsj" href="#" coords="233,61,257,73" shape="rect" data-handler="global"             data-target="images/A.Tratamiento/TConfigMsj.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
-          
-          <!-- CMain-specific hotspots (unique coordinates for B.Control/CMain.png) -->
+          <!-- Prototipo B Main  -->
           <area id="area-cmain-BFrancini" target="" alt="BFrancini" title="BFrancini" href="#" coords="20,363,377,421" shape="rect" data-handler="global"          data-target="images/B.Control/CMsj.png">
           <area id="area-cmain-newfollowers" target="" alt="NewFollowers" title="NewFollowers" href="#" coords="23,224,366,275" shape="rect" data-handler="global" data-target="images/B.Control/C.NuevosSeguidores.png">
           <area id="area-cmain-solicitudmsj" target="" alt="SolicitudMsj" title="SolicitudMsj" href="#" coords="13,570,368,632" shape="rect" data-handler="global" data-target="images/B.Control/CSolicitudMensaje.png">
           <area id="area-cmain-activity" target="" alt="Activity" title="Activity" href="#" coords="20,293,372,354" shape="rect" data-handler="global"             data-target="images/B.Control/C.Actividad.png">
-          <!-- Configuración -->
+          <!-- Prototipo B Configuración -->
           <area id="area-cmain-systemnotif" target="" alt="SystemNotif" title="SystemNotif" href="#" coords="11,500,371,565" shape="rect" data-handler="global"   data-target="images/B.Control/CNotfSys.png">
-          <area id="area-CConfig" target="" alt="CConfig" title="CConfig" href="#" coords="352,59,376,80" shape="rect" data-handler="enabled" data-target="images/B.Control/CConfig.png" data-enabled="CNotfSys.png|CSysDen.png">
-
-          <area id="area-Bdenuncias" target="" alt="BDenuncias" title="BDenuncias" href="#" coords="61,107,153,132" shape="rect" data-handler="global"            data-target="images/B.Control/CSysDen.png" data-enabled="CNotfSys.png">
-
+          <area id="area-Bdenuncias" target="" alt="BDenuncias" title="BDenuncias" href="#" coords="61,107,153,132" shape="rect" data-handler="enabled" data-target="images/B.Control/CSysDen.png" data-enabled="CNotfSys.png|CSysDen.png">
+          <area id="area-actualcuenta" target="" alt="ActualCuenta" title="ActualCuenta" href="#" coords="163,105,373,136" shape="rect" data-handler="enabled" data-target="images/B.Control/CNotfSys.png" data-enabled="CSysDen.png">
+          <area id="area-rueda" target="" alt="Rueda" title="Rueda" href="#" coords="336,48,388,92" shape="rect" data-handler="enabled" data-target="images/B.Control/CConfig.png" data-enabled="CNotfSys.png|CSysDen.png">
         </map>
 
       </div>
