@@ -133,6 +133,21 @@ img#screen {
   }
 }
 
+/* Remove the simulated phone ‘black frame’ on small screens (mobile) */
+@media (max-width: 768px) {
+  .device {
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 4px !important;
+  }
+  /* keep the white app screen visible and slightly rounded */
+  .screen-wrap {
+    border-radius: 6px !important;
+    background: #fff !important;
+  }
+}
+
 /* ---------- Desktop: pin controls to side ---------- */
 @media (min-width: 769px) {
   #ab-controls {
@@ -279,5 +294,72 @@ img#screen {
 .events { margin-top:6px; font-size:13px; max-height:220px; overflow:auto; }
 .btn-danger { background:#ffecec; border:1px solid #f5c2c2; padding:6px 8px; }
 .flex-fill { flex:1; }
+
+/* --------- JS-created modal & controls (moved from inline styles) --------- */
+.js-modal-backdrop {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.js-modal-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px;
+  width: min(640px, 92%);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  color: #111;
+}
+.modal-title { margin-top: 0; }
+.js-modal-textarea { width: 100%; margin-bottom: 8px; font-family: inherit; font-size: 14px; }
+.js-modal-row { display:flex; gap:8px; }
+.info-text { font-size:13px; color:#444; margin-bottom:8px; }
+
+/* Buttons used by JS-created modals */
+.btn-primary { padding:8px 12px; background:#0b74de; color:#fff; border:none; border-radius:6px; cursor:pointer; }
+.btn-secondary { padding:8px 12px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; }
+.btn-close { padding:8px 12px; border:1px solid #ccc; border-radius:6px; background:#fff; cursor:pointer; }
+
+/* Toast created by JS */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  z-index: 20000;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+/* Event list item in counts modal */
+.event-item { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; font-size:13px; }
+
+/* Paragraph inside JS modals preserving whitespace */
+.modal-paragraph { white-space: pre-wrap; margin-bottom:12px; }
+
+/* Small label for miss events (used in events list) */
+.miss-label { color: #c00; font-weight: 700; }
+
+/* Results page specific styles (moved from results.html) */
+.container { max-width: 980px; margin: 28px auto; padding: 16px; }
+.dropzone { border: 2px dashed #bbb; padding: 24px; text-align: center; border-radius: 8px; background: #fafafa; }
+.dropzone-note { margin-bottom: 8px; }
+.file-input { margin-top: 8px; }
+table.results-table, table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background: #f5f5f5; }
+.details { white-space: pre-wrap; font-family: monospace; display: none; background: #fff; padding: 8px; border: 1px solid #eee; margin-top: 8px; }
+.controls-row { margin-top: 12px; }
+.section-title { margin-top: 20px; }
+.btn-back { margin-left: 8px; text-decoration: none; display: inline-block; padding: 6px 10px; border-radius: 4px; background: #e2e8f0; color: #000; }
+
 
 

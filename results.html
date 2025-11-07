@@ -5,17 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Session Results — Aggregate</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    /* small page-specific styles */
-    .container{max-width:980px;margin:28px auto;padding:16px}
-    .dropzone{border:2px dashed #bbb;padding:24px;text-align:center;border-radius:8px;background:#fafafa}
-    table{width:100%;border-collapse:collapse;margin-top:16px}
-    th,td{border:1px solid #ddd;padding:8px;text-align:left}
-    th{background:#f5f5f5}
-    .details{white-space:pre-wrap;font-family:monospace;display:none;background:#fff;padding:8px;border:1px solid #eee;margin-top:8px}
-    .controls-row{margin-top:12px}
-    .muted{color:#666;font-size:0.9rem}
-  </style>
 </head>
 <body>
   <div class="container">
@@ -23,15 +12,15 @@
     <p class="muted">Select one or more JSON files exported from the prototype; the page will parse them and show a table of results. You can also drag & drop files into the area below.</p>
 
     <div id="dropzone" class="dropzone" tabindex="0">
-      <div style="margin-bottom:8px">Drop JSON files here</div>
+      <div class="dropzone-note">Drop JSON files here</div>
       <div>or</div>
-      <input id="fileInput" type="file" accept="application/json" multiple style="margin-top:8px" />
+      <input id="fileInput" type="file" accept="application/json" multiple class="file-input" />
     </div>
 
     <div class="controls-row">
       <button id="aggregateBtn" class="control-button">Aggregate results</button>
       <button id="clearBtn" class="control-button">Clear</button>
-      <a href="index.html" class="control-button" style="margin-left:8px;text-decoration:none;display:inline-block;padding:6px 10px;border-radius:4px;background:#e2e8f0;color:#000;">Back to prototype</a>
+      <a href="index.html" class="control-button btn-back">Back to prototype</a>
     </div>
 
     <table id="resultsTable" aria-live="polite">
@@ -48,7 +37,7 @@
       <tbody></tbody>
     </table>
 
-    <h3 style="margin-top:20px">Aggregated totals</h3>
+  <h3 class="section-title">Aggregated totals</h3>
     <div id="aggregateView" class="muted">No files loaded.</div>
 
   </div>

@@ -209,6 +209,21 @@ function readCounts() {
 function saveCounts(obj) { localStorage.setItem(COUNTS_KEY, JSON.stringify(obj)); }
 
 function incrementCount(areaId) {
+  // Only count clicks/misses while a task run is active (started and not finished).
+  // Allow counting for special task events (ids starting with 'task-').
+  try {
+    const aid = String(areaId || '');
+    if (!aid.startsWith('task-')) {
+      const state = loadTaskState();
+      const idx = state?.currentIndex ?? 0;
+      const run = state?.runs && state.runs[idx];
+      if (!run || !run.startedAt || run.finishedAt) {
+        // Not currently recording; return current counts without incrementing
+        return readCounts();
+      }
+    }
+  } catch(e) {}
+
   const v = localStorage.getItem(VAR_KEY) || assignVariant();
   const counts = readCounts();
   if (!counts[v]) counts[v] = {};
@@ -230,6 +245,19 @@ function recordEvent(areaId, target, isMiss, coords) {
 
     const img = getScreenImg();
     const screenPath = img ? decodeURIComponent(img.getAttribute('src') || '') : null;
+
+    // If not during an active run, skip recording non-task events.
+    try {
+      const aid = String(areaId || '');
+      if (!aid.startsWith('task-')) {
+        const state = loadTaskState();
+        const idx = state?.currentIndex ?? 0;
+        const run = state?.runs && state.runs[idx];
+        if (!run || !run.startedAt || run.finishedAt) {
+          return null;
+        }
+      }
+    } catch(e) {}
 
     const ev = {
       id: areaId,
@@ -273,19 +301,9 @@ function pushTaskEvent(type, taskIndex, extra) {
 // --------- Simple modal helpers ----------
 function _createModal(contentEl) {
   const backdrop = document.createElement('div');
-  backdrop.style.position = 'fixed';
-  backdrop.style.left = '0'; backdrop.style.top = '0'; backdrop.style.right = '0'; backdrop.style.bottom = '0';
-  backdrop.style.background = 'rgba(0,0,0,0.45)';
-  backdrop.style.display = 'flex';
-  backdrop.style.alignItems = 'center';
-  backdrop.style.justifyContent = 'center';
-  backdrop.style.zIndex = '10000';
+  backdrop.className = 'js-modal-backdrop';
   const box = document.createElement('div');
-  box.style.background = '#fff';
-  box.style.borderRadius = '8px';
-  box.style.padding = '14px';
-  box.style.width = 'min(640px, 92%)';
-  box.style.boxShadow = '0 8px 30px rgba(0,0,0,0.35)';
+  box.className = 'js-modal-box';
   box.appendChild(contentEl);
   backdrop.appendChild(box);
   document.body.appendChild(backdrop);
@@ -294,12 +312,12 @@ function _createModal(contentEl) {
 
 function showStartModal(taskIndex, onSave) {
   const container = document.createElement('div');
-  const title = document.createElement('h3'); title.textContent = 'Iniciar tarea'; title.style.marginTop = '0';
-  const txt = document.createElement('textarea'); txt.value = TASKS[taskIndex] || ''; txt.rows = 3; txt.style.width = '100%'; txt.readOnly = true; txt.style.marginBottom = '8px';
-  const notes = document.createElement('textarea'); notes.placeholder = 'Notas de inicio (opcional)'; notes.rows = 4; notes.style.width = '100%'; notes.style.marginBottom = '8px';
-  const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px';
-  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Guardar inicio'; saveBtn.style.padding = '8px 12px'; saveBtn.style.background = '#0b74de'; saveBtn.style.color = '#fff'; saveBtn.style.border = 'none'; saveBtn.style.borderRadius = '6px';
-  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #ccc'; cancelBtn.style.borderRadius = '6px';
+  const title = document.createElement('h3'); title.textContent = 'Iniciar tarea'; title.className = 'modal-title';
+  const txt = document.createElement('textarea'); txt.value = TASKS[taskIndex] || ''; txt.rows = 3; txt.className = 'js-modal-textarea'; txt.readOnly = true;
+  const notes = document.createElement('textarea'); notes.placeholder = 'Notas de inicio (opcional)'; notes.rows = 4; notes.className = 'js-modal-textarea';
+  const row = document.createElement('div'); row.className = 'js-modal-row';
+  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Guardar inicio'; saveBtn.className = 'btn-primary';
+  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.className = 'btn-secondary';
   row.appendChild(saveBtn); row.appendChild(cancelBtn);
   container.appendChild(title); container.appendChild(txt); container.appendChild(notes); container.appendChild(row);
   const modal = _createModal(container);
@@ -316,15 +334,21 @@ function showStartModal(taskIndex, onSave) {
       pushTaskEvent('start', idx, { startNotes: notes.value });
       if (typeof onSave === 'function') onSave(state.runs[idx]);
     } catch(e){}
+    // make sure we don't allow duplicate saves
+    saveBtn.disabled = true;
+    setTimeout(()=>{ saveBtn.disabled = false; }, 600);
+    // focus returned to main screen; close modal
     modal.remove();
   });
+  // focus notes for faster input on mobile
+  setTimeout(()=>{ try{ notes.focus(); }catch(e){} }, 50);
 }
 
 function showNextTaskModal(nextIndex) {
   const container = document.createElement('div');
-  const title = document.createElement('h3'); title.textContent = 'Siguiente tarea'; title.style.marginTop = '0';
+  const title = document.createElement('h3'); title.textContent = 'Siguiente tarea'; title.className = 'modal-title';
   const txt = document.createElement('p'); txt.textContent = TASKS[nextIndex] || 'No hay más tareas'; txt.style.whiteSpace = 'pre-wrap';
-  const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.style.padding = '8px 12px'; closeBtn.style.border = '1px solid #ccc'; closeBtn.style.borderRadius = '6px';
+  const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.className = 'btn-close';
   container.appendChild(title); container.appendChild(txt); container.appendChild(closeBtn);
   const modal = _createModal(container);
   closeBtn.addEventListener('click', () => modal.remove());
@@ -332,13 +356,17 @@ function showNextTaskModal(nextIndex) {
 
 function showFinalResponseModal(taskIndex) {
   const container = document.createElement('div');
-  const title = document.createElement('h3'); title.textContent = 'Respuesta final'; title.style.marginTop = '0';
+  const title = document.createElement('h3'); title.textContent = 'Respuesta final'; title.className = 'modal-title';
   const txt = document.createElement('p'); txt.textContent = TASKS[taskIndex] || ''; txt.style.whiteSpace = 'pre-wrap';
-  const resp = document.createElement('textarea'); resp.rows = 6; resp.style.width = '100%'; resp.placeholder = 'Escribe tu respuesta aquí...'; resp.style.marginBottom = '8px';
-  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Enviar respuesta'; saveBtn.style.padding = '8px 12px'; saveBtn.style.background = '#0b74de'; saveBtn.style.color = '#fff'; saveBtn.style.border = 'none'; saveBtn.style.borderRadius = '6px';
-  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.style.padding = '8px 12px'; cancelBtn.style.border = '1px solid #ccc'; cancelBtn.style.borderRadius = '6px';
-  const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px'; row.appendChild(saveBtn); row.appendChild(cancelBtn);
-  container.appendChild(title); container.appendChild(txt); container.appendChild(resp); container.appendChild(row);
+  const resp = document.createElement('textarea'); resp.rows = 6; resp.className = 'js-modal-textarea'; resp.placeholder = 'Escribe tu respuesta aquí...';
+  // Instrucción para descargar y enviar el archivo justo debajo del textarea
+  const info = document.createElement('p');
+  info.textContent = 'A continuación, por favor descarga el archivo que va a aparecer y envíaselo a Jimena o Krisly.';
+  info.className = 'info-text';
+  const saveBtn = document.createElement('button'); saveBtn.textContent = 'Enviar respuesta'; saveBtn.className = 'btn-primary';
+  const cancelBtn = document.createElement('button'); cancelBtn.textContent = 'Cancelar'; cancelBtn.className = 'btn-secondary';
+  const row = document.createElement('div'); row.className = 'js-modal-row'; row.appendChild(saveBtn); row.appendChild(cancelBtn);
+  container.appendChild(title); container.appendChild(txt); container.appendChild(resp); container.appendChild(info); container.appendChild(row);
   const modal = _createModal(container);
   cancelBtn.addEventListener('click', () => modal.remove());
   saveBtn.addEventListener('click', () => {
@@ -352,14 +380,20 @@ function showFinalResponseModal(taskIndex) {
       pushTaskEvent('response', taskIndex, { response: resp.value });
     } catch(e){}
     try {
+      // Prevent duplicate submission
+      saveBtn.disabled = true;
+      setTimeout(()=>{ saveBtn.disabled = false; }, 800);
+
       // If on mobile, automatically export results (including the just-saved comment)
       if (typeof isMobileDevice === 'function' && isMobileDevice()) {
         try { exportCounts(); } catch(e){}
-        try { alert('envia esto a jimena o krisly'); } catch(e){}
+        try { showToast('envia esto a Jimena o Krisly', 5000); } catch(e){}
       }
     } catch(e){}
     modal.remove();
   });
+  // focus textarea for quick input on mobile
+  setTimeout(()=>{ try{ resp.focus(); }catch(e){} }, 50);
 }
 
 // Helper: detect mobile/touch or small screen devices
@@ -384,15 +418,26 @@ function startTaskAtIndex(idx) {
   } catch(e) {}
 }
 
+// Prevent rapid double-activations of start/end task actions and provide
+// a small visual disable to make the interaction feel more deliberate.
+function setTaskButtonsDisabled(disabled) {
+  try {
+    const s = document.getElementById('startTaskBtn');
+    const e = document.getElementById('endTaskBtn');
+    if (s) s.disabled = !!disabled;
+    if (e) e.disabled = !!disabled;
+  } catch(e){}
+}
+
 // show a lightweight instruction modal (read-only) for a task index
 function showInstructionModal(idx) {
   try {
     const container = document.createElement('div');
-    const title = document.createElement('h3'); title.textContent = 'Instrucción'; title.style.marginTop = '0';
-    const txt = document.createElement('p'); txt.textContent = TASKS[idx] || ''; txt.style.whiteSpace = 'pre-wrap'; txt.style.marginBottom = '12px';
-    const row = document.createElement('div'); row.style.display = 'flex'; row.style.gap = '8px';
-    const startBtn = document.createElement('button'); startBtn.textContent = 'Comenzar tarea'; startBtn.style.padding = '8px 12px'; startBtn.style.background = '#0b74de'; startBtn.style.color = '#fff'; startBtn.style.border = 'none'; startBtn.style.borderRadius = '6px';
-    const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.style.padding = '8px 12px'; closeBtn.style.border = '1px solid #ccc'; closeBtn.style.borderRadius = '6px';
+  const title = document.createElement('h3'); title.textContent = 'Instrucción'; title.className = 'modal-title';
+  const txt = document.createElement('p'); txt.textContent = TASKS[idx] || ''; txt.style.whiteSpace = 'pre-wrap'; txt.className = 'modal-paragraph';
+  const row = document.createElement('div'); row.className = 'js-modal-row';
+  const startBtn = document.createElement('button'); startBtn.textContent = 'Comenzar tarea'; startBtn.className = 'btn-primary';
+  const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.className = 'btn-close';
     row.appendChild(startBtn); row.appendChild(closeBtn);
     container.appendChild(title); container.appendChild(txt); container.appendChild(row);
     const modal = _createModal(container);
@@ -407,6 +452,10 @@ function showInstructionModal(idx) {
 // --------- Handlers for buttons ----------
 function handleStartTask() {
   try {
+    if (window.__taskActionInProgress) return;
+    window.__taskActionInProgress = true;
+    setTaskButtonsDisabled(true);
+
     const state = loadTaskState();
     const idx = state.currentIndex || 0;
 
@@ -430,10 +479,16 @@ function handleStartTask() {
     console.error('[AB] handleStartTask error', e);
     alert('No se pudo iniciar/mostrar la instrucción. Revisa la consola.');
   }
+  // re-enable after small delay to avoid accidental double presses
+  setTimeout(()=>{ window.__taskActionInProgress = false; setTaskButtonsDisabled(false); }, 700);
 }
 
 function handleEndTask() {
   try {
+    if (window.__taskActionInProgress) return;
+    window.__taskActionInProgress = true;
+    setTaskButtonsDisabled(true);
+
     const state = loadTaskState();
     const idx = state.currentIndex || 0;
 
@@ -458,10 +513,24 @@ function handleEndTask() {
     // Avanzar índice y mostrar instrucción de la siguiente tarea
     state.currentIndex = next;
     saveTaskState(state);
+
+    // Si la siguiente instrucción pide la respuesta final (p.ej. "Cuentanos que te parecio"),
+    // abrir el modal de respuesta inmediatamente para evitar un click extra.
+    try {
+      const nextTxt = (TASKS[next] || '').toString().toLowerCase();
+      if (nextTxt.includes('cuentanos que te parecio') || nextTxt.includes('cuéntanos que te pareció') || nextTxt.includes('cuentanos') && nextTxt.includes('parecio')) {
+        try { showFinalResponseModal(next); } catch(e) { showInstructionModal(next); }
+        return;
+      }
+    } catch(e) {}
+
+    // comportamiento normal: mostrar la instrucción siguiente
     showInstructionModal(next);
   } catch(e){
     console.error('[AB] handleEndTask error', e);
   }
+    // re-enable shortly after finishing
+    setTimeout(()=>{ window.__taskActionInProgress = false; setTaskButtonsDisabled(false); }, 700);
 }
 
 function resetCounts() {
@@ -504,6 +573,8 @@ function exportCounts() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  try { clearAllCookies(); } catch(e){}
+  try { showPostExportRestartModal(); } catch(e){}
 }
 
 
@@ -572,8 +643,86 @@ function exportExperimentJSON() {
   a.href = url; a.download = 'experiment-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json';
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+  try { clearAllCookies(); } catch(e){}
+  try { showPostExportRestartModal(); } catch(e){}
+}
+// ------------ Navigation + tracking --------------
+
+// Reset all counters, events and task state to a clean start
+function resetAllData(reloadAfter = false) {
+  try {
+    // Reset counts
+    resetCounts();
+    // Clear events
+    try { localStorage.removeItem(EVENTS_KEY); } catch(e){}
+    // Reset tasks state to initial
+    try { localStorage.setItem(TASKS_STATE_KEY, JSON.stringify({ currentIndex: 0, runs: [] })); } catch(e){}
+    // Clear any in-memory history
+    try { window.__screenHistory = []; } catch(e){}
+
+    // Update UI: counts, heatmap, overlays
+    try { updateCountsUI(); } catch(e){}
+    try {
+      const canvas = getHeatmapCanvas();
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        canvas.style.display = 'none';
+      }
+    } catch(e){}
+    try { removeAreaOverlays(); } catch(e){}
+
+    // Reset current screen to variant main
+    try {
+      const v = localStorage.getItem(VAR_KEY) || assignVariant();
+      if (v === 'A') setScreen('images/A.Tratamiento/TMain.png'); else setScreen('images/B.Control/CMain.png');
+    } catch(e){}
+
+    if (reloadAfter) {
+      try { setTimeout(() => { location.reload(); }, 250); } catch(e){}
+    }
+  } catch(e){}
 }
 
+// Best-effort clear of all cookies for current domain/path
+function clearAllCookies() {
+  try {
+    const pairs = document.cookie ? document.cookie.split(';') : [];
+    pairs.forEach(function(pair){
+      try {
+        const idx = pair.indexOf('=');
+        const name = idx > -1 ? pair.substr(0, idx).trim() : pair.trim();
+        // expire for path=/ and try with domain=hostname
+        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+        try { document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + location.hostname; } catch(e){}
+      } catch(e){}
+    });
+  } catch(e){}
+}
+
+// Show a small modal right after export offering to restart counters/tasks
+function showPostExportRestartModal() {
+  try {
+    const container = document.createElement('div');
+    const title = document.createElement('h3'); title.textContent = 'Exportado'; title.className = 'modal-title';
+    const p = document.createElement('p'); p.textContent = 'El archivo se ha generado. ¿Deseas reiniciar los contadores y las tareas para comenzar de nuevo?'; p.className = 'modal-paragraph';
+    const row = document.createElement('div'); row.className = 'js-modal-row';
+    const restartBtn = document.createElement('button'); restartBtn.textContent = 'Reiniciar ahora'; restartBtn.className = 'btn-primary';
+    const laterBtn = document.createElement('button'); laterBtn.textContent = 'Cerrar'; laterBtn.className = 'btn-secondary';
+    row.appendChild(restartBtn); row.appendChild(laterBtn);
+    container.appendChild(title); container.appendChild(p); container.appendChild(row);
+    const modal = _createModal(container);
+
+    laterBtn.addEventListener('click', () => { try { modal.remove(); } catch(e){} });
+    restartBtn.addEventListener('click', () => {
+      try {
+        // perform reset and close modal
+        resetAllData(false);
+      } catch(e){}
+      try { modal.remove(); } catch(e){}
+    });
+  } catch(e){}
+}
 
 // ------------ Navigation + tracking --------------
 function setScreen(path) {
@@ -1060,11 +1209,9 @@ function createAreaOverlays() {
         ov.style.top = top + 'px';
         ov.style.width = width + 'px';
         ov.style.height = height + 'px';
-        // On mobile allow the overlay to receive pointer events so taps hit reliably; on desktop keep it visual-only
-        const mobile = isMobileDevice();
-        ov.style.pointerEvents = mobile ? 'auto' : 'none';
-        ov.style.position = 'absolute';
-        ov.style.zIndex = '2';
+  // On mobile allow the overlay to receive pointer events so taps hit reliably; on desktop keep it visual-only
+  const mobile = isMobileDevice();
+  ov.style.pointerEvents = mobile ? 'auto' : 'none';
 
         ov.setAttribute('data-area-id', area.id || '');
         ov.title = area.getAttribute('title') || area.getAttribute('alt') || area.id || '';
@@ -1262,10 +1409,8 @@ function updateCountsUI() {
     el.innerHTML = '';
     if (events.length === 0) el.innerHTML = '<div class="muted">No events recorded yet.</div>';
     events.forEach(ev => {
-      const d = document.createElement('div');
-      d.style.padding = '6px 8px';
-      d.style.borderBottom = '1px solid #f1f5f9';
-      d.style.fontSize = '13px';
+  const d = document.createElement('div');
+  d.className = 'event-item';
       // show ISO timestamp and epoch ms for each click
       const ms = ev.ts_ms ? (' — ' + ev.ts_ms + ' ms') : '';
       d.innerHTML = `<strong>${ev.id}</strong> <span class="muted">(${ev.variant})</span><div class="muted">${ev.ts}${ms} ${ev.miss?'<span style="color:#c00">miss</span>':''}</div>`;
@@ -1426,7 +1571,7 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
     const data = { exportedAt: isoTimestamp(), exportedAtMs: Date.now(), variant: localStorage.getItem(VAR_KEY), counts: counts, events: events, missSummary, tasks };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = 'prototype-data-'+isoTimestamp().slice(0,19).replace(/[:T]/g,'-')+'.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); try { clearAllCookies(); } catch(e){} try { showPostExportRestartModal(); } catch(e){}
   });
 
   const exportCSV = document.getElementById('exportEventsCSV');
