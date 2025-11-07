@@ -31,17 +31,26 @@
           <area id="area-TConfig"    target="" alt="TConfig" title="TConfig" href="#" coords="352,59,376,80" shape="rect" data-handler="enabled"                     data-target="images/A.Tratamiento/TConfig.png" data-enabled="TNotfSys.png|TSysDen.png">
           <area id="area-TActFltrs"  target="" alt="TActFltrs" title="TActFltrs" href="#" coords="244,58,262,76" shape="rect" data-handler="enabled"               data-target="images/A.Tratamiento/TActvFltrs.png" data-enabled="TActv.png">
           <area id="area-TConfigMsj" target="" alt="TConfigMsj" title="TConfigMsj" href="#" coords="233,61,257,73" shape="rect" data-handler="global"             data-target="images/A.Tratamiento/TConfigMsj.png" data-disabled="TActvFltrs.png|TConfig.png|TConfigMsj.png|TMsj.png">
+           <!-- Aequis (A): solo visible en TConfigMsj; vuelve a TMain -->
+            <area id="area-aequis" target="" alt="Aequis" title="Aequis" href="#" coords="356,396,376,415" shape="rect" data-handler="enabled" data-target="images/A.Tratamiento/TMain.png" data-enabled="TConfigMsj.png">
           <!-- Prototipo B Main  -->
           <area id="area-cmain-BFrancini" target="" alt="BFrancini" title="BFrancini" href="#" coords="20,363,377,421" shape="rect" data-handler="global"          data-target="images/B.Control/CMsj.png">
           <area id="area-cmain-newfollowers" target="" alt="NewFollowers" title="NewFollowers" href="#" coords="23,224,366,275" shape="rect" data-handler="global" data-target="images/B.Control/C.NuevosSeguidores.png">
           <area id="area-cmain-solicitudmsj" target="" alt="SolicitudMsj" title="SolicitudMsj" href="#" coords="13,570,368,632" shape="rect" data-handler="global" data-target="images/B.Control/CSolicitudMensaje.png">
           <area id="area-cmain-activity" target="" alt="Activity" title="Activity" href="#" coords="20,293,372,354" shape="rect" data-handler="global"             data-target="images/B.Control/C.Actividad.png">
+         
           <!-- Prototipo B Configuración -->
           <area id="area-cmain-systemnotif" target="" alt="SystemNotif" title="SystemNotif" href="#" coords="11,500,371,565" shape="rect" data-handler="global"   data-target="images/B.Control/CNotfSys.png">
           <area id="area-Bdenuncias" target="" alt="BDenuncias" title="BDenuncias" href="#" coords="61,107,153,132" shape="rect" data-handler="enabled" data-target="images/B.Control/CSysDen.png" data-enabled="CNotfSys.png|CSysDen.png">
           <area id="area-actualcuenta" target="" alt="ActualCuenta" title="ActualCuenta" href="#" coords="163,105,373,136" shape="rect" data-handler="enabled" data-target="images/B.Control/CNotfSys.png" data-enabled="CSysDen.png">
-          <area id="area-rueda" target="" alt="Rueda" title="Rueda" href="#" coords="336,48,388,92" shape="rect" data-handler="enabled" data-target="images/B.Control/CConfig.png" data-enabled="CNotfSys.png|CSysDen.png">
-        </map>
+          <area id="area-rueda" target="" alt="Rueda" title="Rueda" href="#" coords="352,56,377,85" shape="rect" data-handler="enabled" data-target="images/B.Control/CConfig.png" data-enabled="CNotfSys.png|CSysDen.png">
+          <!-- Toggle: solo debe aparecer en CMain; lleva a CConfigMsj.png -->
+         <area id="area-toggle" target="" alt="toggle" title="toggle" href="#" coords="235,56,262,72" shape="rect" data-handler="enabled" data-target="images/B.Control/CConfigMsj.png" data-enabled="CMain.png">
+           <!-- Equis: solo en CConfigMsj, vuelve a CMain -->
+           <area id="area-equis" target="" alt="equis" title="equis" href="#" coords="356,366,380,394" shape="rect" data-handler="enabled" data-target="images/B.Control/CMain.png" data-enabled="CConfigMsj.png">
+           <!-- Bfiltros: solo aparece en C.Actividad y lleva a CActvFltrs -->
+          <area id="area-bfiltros" target="" alt="Bfiltros" title="Bfiltros" href="#" coords="243,57,264,75" shape="rect" data-handler="enabled" data-target="images/B.Control/CActvFltrs.png" data-enabled="C.Actividad.png">
+          </map>
 
       </div>
     </div>

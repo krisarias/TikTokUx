@@ -685,22 +685,28 @@ function handleEnabledOn(areaId, targetImage, enabledBasenames) {
 
 // Consolidated area activation rules (use canonical basenames)
 const AREA_RULES = {
-  // These areas should only be active on the A (T-*) images
   'area-afrancini': { enabledOn: ['TMain.png'], disabledOn: ['CMain.png'] },
   'area-solicitudmsj': { enabledOn: ['TMsj.png'] },
   // disable back on the main screens (both A and B main variants)
   'area-back-msj': { disabledOn: ['TMain.png','CMain.png'] },
   'area-msj2': { enabledOn: ['TMain.png'] },
   'area-tconfigmsj': { enabledOn: ['TMain.png'] },
+  // Aequis (A): visible solo en TConfigMsj y vuelve a TMain
+  'area-aequis': { enabledOn: ['TConfigMsj.png'] },
   'area-tconfig': { enabledOn: ['TNotfSys.png','TSysDen.png'] },
   'area-tactfltrs': { enabledOn: ['TActv.png'] },
-  // ADenuncias (A variant) should only be active on TNotfSys
   'area-adenuncias': { enabledOn: ['TNotfSys.png'] },
   'area-bdenuncias': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
   // B/C variant denuncias (CNotfSys) handled separately
   'area-actualizaciones': { enabledOn: ['TSysDen.png'] },
   'area-actualcuenta': { enabledOn: ['CSysDen.png'] },
   'area-rueda': { enabledOn: ['CNotfSys.png','CSysDen.png'] },
+  // Bfiltros: only visible on C.Actividad and navigates to CActvFltrs
+  'area-bfiltros': { enabledOn: ['C.Actividad.png'] },
+  // Toggle: only visible on CMain, navigates to CConfigMsj
+  'area-toggle': { enabledOn: ['CMain.png'] },
+  // Equis: only visible on CConfigMsj, navigates back to CMain
+  'area-equis': { enabledOn: ['CConfigMsj.png'] },
   // CMain-specific hotspots
   'area-cmain-bfrancini': { enabledOn: ['CMain.png'] },
   'area-cmain-newfollowers': { enabledOn: ['CMain.png'] },
