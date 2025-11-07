@@ -1,3 +1,4 @@
+"use strict";
 try {
   console.log('prototype_ab.js loaded', location.href);
 } catch(e) {}
@@ -36,6 +37,84 @@ function isoTimestamp(d = new Date()) {
   }
 }
 
+// Lightweight toast helper used across the app. Creates a small transient
+// message in the bottom of the viewport. Safe to call even if DOM is not ready.
+function showToast(msg, duration) {
+  try {
+    duration = Number(duration) || 3000;
+    const id = '__tt_toast';
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      // Use the stylesheet class so styles live in styles.css
+      el.className = 'app-toast';
+      document.body.appendChild(el);
+    } else {
+      // ensure proper class in case it was changed
+      el.className = 'app-toast';
+    }
+
+    el.textContent = String(msg || '');
+
+    // show by setting opacity (CSS transition handles fade)
+    requestAnimationFrame(() => { try { el.style.opacity = '1'; } catch(e){} });
+
+    // clear previous timer if any
+    if (el.__toastTimer) clearTimeout(el.__toastTimer);
+    el.__toastTimer = setTimeout(() => {
+      try { el.style.opacity = '0'; } catch(e){}
+      setTimeout(() => { try { if (el && el.parentNode) el.parentNode.removeChild(el); } catch(e){} }, 300);
+    }, duration);
+  } catch(e) { /* swallowing to avoid breaking host page */ }
+}
+
+// Prompt the participant for their name if not already stored
+// askForParticipantName optionally accepts a callback that will be invoked with the saved value
+// (or null if skipped). This allows callers (like export functions) to prompt the user
+// and continue the export after the name is provided.
+function askForParticipantName(onSaved) {
+  try {
+    const key = 'tt_participant_name';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+
+    const container = document.createElement('div');
+  const title = document.createElement('h3'); title.textContent = 'Hola! Estamos probando un nuevo diseño.'; title.className = 'modal-title';
+  const intro = document.createElement('p'); intro.textContent = '¿Nos das tu nombre para identificar este test por favor?'; intro.className = 'info-text';
+  const txt = document.createElement('input'); txt.type = 'text'; txt.className = 'js-modal-textarea'; txt.placeholder = 'Escribe tu nombre';
+    const row = document.createElement('div'); row.className = 'js-modal-row';
+    const saveBtn = document.createElement('button'); saveBtn.className = 'btn-primary'; saveBtn.textContent = 'Guardar';
+    const skipBtn = document.createElement('button'); skipBtn.className = 'btn-secondary'; skipBtn.textContent = 'Omitir';
+    row.appendChild(saveBtn); row.appendChild(skipBtn);
+  container.appendChild(title); container.appendChild(intro); container.appendChild(txt); container.appendChild(row);
+    const modal = _createModal(container);
+
+    saveBtn.addEventListener('click', () => {
+      try {
+        const v = (txt.value || '').trim();
+        if (v) {
+          try { localStorage.setItem(key, v); } catch(e){}
+          // Inform the participant what to do next after saving their name
+          try {
+            showToast('Gracias! ' + 
+              ". Presiona el botón \"Instrucciones\" cuando estés listo. Te dará una pequeña tarea que hacer; cuando la completes presiona el botón \"terminar tarea\".", 9000);
+          } catch(e) {
+            // fallback shorter toast
+            showToast('Nombre guardado: ' + v, 2800);
+          }
+        }
+      } catch(e){}
+      try { modal.remove(); } catch(e){}
+      try { if (typeof onSaved === 'function') onSaved((txt.value||'').trim() || null); } catch(e){}
+    });
+
+    skipBtn.addEventListener('click', () => { try { modal.remove(); } catch(e){} try { if (typeof onSaved === 'function') onSaved(null); } catch(e){} });
+    setTimeout(()=>{ try{ txt.focus(); }catch(e){} }, 50);
+    return null;
+  } catch(e) { return null; }
+}
+
 // Task list (sequence requested by user)
 const TASKS = [
   'Revisa tus mensajes con francini1822',
@@ -50,13 +129,13 @@ function assignVariant() {
   let v = localStorage.getItem(VAR_KEY);
   if (!v) {
     v = (Math.random() < 0.5) ? 'A' : 'B';
-    localStorage.setItem(VAR_KEY, v);
+    try { localStorage.setItem(VAR_KEY, v); } catch(e){}
   }
   return v;
 }
 
 function setVariant(v) {
-  localStorage.setItem(VAR_KEY, v);
+  try { localStorage.setItem(VAR_KEY, v); } catch(e){}
   const el = document.getElementById('variant-label');
   if (el) el.textContent = v;
   try {
@@ -435,12 +514,13 @@ function showInstructionModal(idx) {
   try {
     const container = document.createElement('div');
   const title = document.createElement('h3'); title.textContent = 'Instrucción'; title.className = 'modal-title';
+  const intro = document.createElement('p'); intro.textContent = 'Estamos probando cuál diseño de interfaz es mejor.'; intro.className = 'info-text';
   const txt = document.createElement('p'); txt.textContent = TASKS[idx] || ''; txt.style.whiteSpace = 'pre-wrap'; txt.className = 'modal-paragraph';
   const row = document.createElement('div'); row.className = 'js-modal-row';
   const startBtn = document.createElement('button'); startBtn.textContent = 'Comenzar tarea'; startBtn.className = 'btn-primary';
   const closeBtn = document.createElement('button'); closeBtn.textContent = 'Cerrar'; closeBtn.className = 'btn-close';
     row.appendChild(startBtn); row.appendChild(closeBtn);
-    container.appendChild(title); container.appendChild(txt); container.appendChild(row);
+    container.appendChild(title); container.appendChild(intro); container.appendChild(txt); container.appendChild(row);
     const modal = _createModal(container);
     closeBtn.addEventListener('click', () => modal.remove());
     startBtn.addEventListener('click', () => {
@@ -564,7 +644,20 @@ function exportCounts() {
   // include events and task state so exported file contains timestamps and task metadata
   const events = readEvents();
   const tasks = loadTaskState();
+  // Ensure participant name exists; if not, prompt and resume export after save
+  try {
+    const p = localStorage.getItem('tt_participant_name');
+    if (!p) {
+      askForParticipantName(function() {
+        // resume export after name entry; slight delay to allow modal teardown
+        setTimeout(() => { try { exportCounts(); } catch(e){} }, 120);
+      });
+      return;
+    }
+  } catch(e) {}
+
   const exported = { exportedAt: isoTimestamp(), exportedAtMs: Date.now(), variant: localStorage.getItem(VAR_KEY), counts: data, events: events, missSummary, tasks };
+  try { exported.participantName = localStorage.getItem('tt_participant_name') || null; } catch(e) { exported.participantName = null; }
   const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -602,6 +695,17 @@ function exportExperimentJSON() {
     };
   });
 
+  // Ensure participant name exists; if not, prompt and resume export after save
+  try {
+    const p = localStorage.getItem('tt_participant_name');
+    if (!p) {
+      askForParticipantName(function() {
+        setTimeout(() => { try { exportExperimentJSON(); } catch(e){} }, 120);
+      });
+      return;
+    }
+  } catch(e) {}
+
   // metadatos de sesión
   const meta = {
     sessionId: localStorage.getItem('tt_session_id') || (function(){
@@ -614,6 +718,7 @@ function exportExperimentJSON() {
     userAgent: navigator.userAgent,
     isTouch: (('ontouchstart' in window) || (navigator.maxTouchPoints>0)),
     viewport: { w: window.innerWidth, h: window.innerHeight },
+    participantName: localStorage.getItem('tt_participant_name') || null,
     schemaVersion: '2',
     prototypeVersion: (window.__PROTOTYPE_VERSION__ || null)
   };
@@ -718,30 +823,16 @@ function showPostExportRestartModal(jsonString) {
 
     container.appendChild(title);
     container.appendChild(p);
-
-    // derive a short participant identifier to prefill messages (use participantId if set, otherwise sessionId)
-    let participantId = null;
-    try {
-      participantId = localStorage.getItem('tt_participant_id') || localStorage.getItem('tt_session_id') || null;
-      if (!participantId) {
-        participantId = 'sess_' + Math.random().toString(36).slice(2,9);
-        try { localStorage.setItem('tt_session_id', participantId); } catch(e){}
-      }
-    } catch(e) { participantId = participantId || ('sess_' + Math.random().toString(36).slice(2,9)); }
-    const participantLabel = 'ID: ' + participantId;
-
-    // If we received the serialized JSON, offer copy + WhatsApp actions and a preview toggle
+    
     let previewArea = null;
     if (jsonString) {
-      const hint = document.createElement('p'); hint.textContent = 'Puedes copiar el JSON completo o enviarlo vía WhatsApp. Si el archivo es muy grande, se copiará al portapapeles y WhatsApp abrirá con una instrucción para pegar.'; hint.className = 'modal-paragraph';
+      const hint = document.createElement('p'); hint.textContent = 'Puedes copiar el JSON completo.'; hint.className = 'modal-paragraph';
       container.appendChild(hint);
 
   const ctrlRow = document.createElement('div'); ctrlRow.className = 'js-modal-row';
   const copyBtn = document.createElement('button'); copyBtn.textContent = 'Copiar JSON'; copyBtn.className = 'btn-primary';
-  // Single WhatsApp-send button (opens chat to the specific number)
-  const waSendBtn = document.createElement('button'); waSendBtn.textContent = 'Enviar por WhatsApp a +506 83373159'; waSendBtn.className = 'btn-primary';
   const toggleBtn = document.createElement('button'); toggleBtn.textContent = 'Mostrar JSON'; toggleBtn.className = 'btn-close';
-  ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(waSendBtn); ctrlRow.appendChild(toggleBtn);
+  ctrlRow.appendChild(copyBtn); ctrlRow.appendChild(toggleBtn);
       container.appendChild(ctrlRow);
 
       previewArea = document.createElement('textarea');
@@ -790,70 +881,7 @@ function showPostExportRestartModal(jsonString) {
         } catch (e) { try { showToast('Error copiando al portapapeles', 3000); } catch(e){} finally { try { copyBtn.disabled = false; } catch(e){} } }
       });
 
-      // threshold for when to prefer copy-to-clipboard + short-instruction approach
-      const LARGE_THRESHOLD = 3000; // chars
-
-      // Single unified send button: copy to clipboard (with confirmation) then open WhatsApp to specific number
-      waSendBtn.addEventListener('click', async () => {
-        // Open a popup synchronously to avoid popup blockers after async awaits
-        let popup = null;
-        try {
-          popup = window.open('', '_blank');
-        } catch (e) { popup = null; }
-
-        try {
-          if (!jsonString) return;
-          // disable while processing
-          waSendBtn.disabled = true;
-          copyBtn.disabled = true;
-
-          // Always attempt to copy first so recipient gets full JSON if needed
-          const copied = await copyToClipboard(jsonString);
-          if (copied) {
-            showToast('JSON copiado al portapapeles', 2000);
-          } else {
-            showToast('No se pudo copiar automáticamente. Se abrirá WhatsApp para que pegues manualmente.', 3500);
-          }
-
-          const phone = '50683373159';
-          let message = '';
-          if (jsonString.length > LARGE_THRESHOLD) {
-            message = participantLabel + ' — He copiado el archivo JSON exportado en mi portapapeles. Por favor pega el contenido aquí.';
-          } else {
-            message = participantLabel + '\n\n' + jsonString;
-          }
-
-          // First try the native WhatsApp URI to open the app directly on mobile
-          const nativeUrl = 'whatsapp://send?phone=' + phone + '&text=' + encodeURIComponent(message);
-          const webUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
-
-          if (popup) {
-            try {
-              // navigate popup to native scheme first; many mobile browsers will hand this to the OS
-              popup.location.href = nativeUrl;
-              // fallback to web after a short delay if native scheme didn't open an external app
-              setTimeout(() => {
-                try { popup.location.href = webUrl; } catch(e) { try { window.open(webUrl, '_blank'); } catch(e){} }
-              }, 700);
-            } catch(e) {
-              try { popup.location.href = webUrl; } catch(e) { window.open(webUrl, '_blank'); }
-            }
-          } else {
-            // no popup (rare) -> try native first then fallback
-            try {
-              window.location.href = nativeUrl;
-              setTimeout(() => { try { window.open(webUrl, '_blank'); } catch(e){} }, 700);
-            } catch(e) {
-              try { window.open(webUrl, '_blank'); } catch(e){}
-            }
-          }
-        } catch (e) {
-          try { await copyToClipboard(jsonString); } catch(e){}
-          try { showToast('No se pudo abrir WhatsApp. JSON copiado al portapapeles.', 3500); } catch(e){}
-        } finally {
-          try { waSendBtn.disabled = false; copyBtn.disabled = false; } catch(e){}
-        }
-      });
+      // (WhatsApp send option removed) single-copy behavior remains above.
 
       toggleBtn.addEventListener('click', () => {
         try {
@@ -1586,18 +1614,46 @@ function updateCountsUI() {
 
   const events = readEvents().slice(-50).reverse();
   const el = document.getElementById('events-list');
-  if (el) {
-    el.innerHTML = '';
-    if (events.length === 0) el.innerHTML = '<div class="muted">No events recorded yet.</div>';
-    events.forEach(ev => {
-  const d = document.createElement('div');
-  d.className = 'event-item';
-      // show ISO timestamp and epoch ms for each click
-      const ms = ev.ts_ms ? (' — ' + ev.ts_ms + ' ms') : '';
-      d.innerHTML = `<strong>${ev.id}</strong> <span class="muted">(${ev.variant})</span><div class="muted">${ev.ts}${ms} ${ev.miss?'<span style="color:#c00">miss</span>':''}</div>`;
-      el.appendChild(d);
-    });
-  }
+    if (el) {
+      el.innerHTML = '';
+      if (events.length === 0) {
+        const no = document.createElement('div');
+        no.className = 'muted';
+        no.textContent = 'No events recorded yet.';
+        el.appendChild(no);
+      }
+      events.forEach(ev => {
+        const d = document.createElement('div');
+        d.className = 'event-item';
+
+        // strong: event id
+        const sId = document.createElement('strong');
+        sId.textContent = String(ev.id || '');
+        d.appendChild(sId);
+
+        // variant (muted)
+        const vSpan = document.createElement('span');
+        vSpan.className = 'muted';
+        vSpan.textContent = ' (' + (ev.variant || '') + ')';
+        d.appendChild(document.createTextNode(' '));
+        d.appendChild(vSpan);
+
+        // timestamp line
+        const tsDiv = document.createElement('div');
+        tsDiv.className = 'muted';
+        const ms = ev.ts_ms ? (' — ' + ev.ts_ms + ' ms') : '';
+        tsDiv.textContent = String(ev.ts || '') + ms;
+        if (ev.miss) {
+          const missSpan = document.createElement('span');
+          missSpan.style.color = '#c00';
+          missSpan.textContent = ' miss';
+          tsDiv.appendChild(document.createTextNode(' '));
+          tsDiv.appendChild(missSpan);
+        }
+        d.appendChild(tsDiv);
+        el.appendChild(d);
+      });
+    }
 }
 
 // ------------ Area click wiring --------------
@@ -1813,6 +1869,9 @@ function closeCountsModal() { const b = document.getElementById('counts-backdrop
   document.addEventListener('DOMContentLoaded', () => {
     const v = assignVariant();
     const label = document.getElementById('variant-label'); if (label) label.textContent = v;
+
+    // ask for participant name when the UI loads
+    try { askForParticipantName(); } catch(e){}
 
     try {
       const abControls = document.getElementById('ab-controls');

@@ -18,7 +18,7 @@
     // Flexible extraction updated to support the modern export shape produced
     // by prototype_ab.js: { exportedAt, exportedAtMs, variant, counts, events,
     //   missSummary, tasks, meta }
-  const metrics = { variant: '—', total: null, miss: 0, counts: null, perVariantTotals: null, exportedAt: null, lastTaskName: null, lastTaskDurationS: null, respuesta_final: null, tasks: null };
+  const metrics = { variant: '—', total: null, miss: 0, counts: null, perVariantTotals: null, exportedAt: null, lastTaskName: null, lastTaskDurationS: null, respuesta_final: null, tasks: null, participantName: null };
     if(!parsed) return metrics;
 
     // If the top-level is an array of events, use length
@@ -35,7 +35,11 @@
         try{ metrics.exportedAt = new Date(Number(parsed.exportedAtMs)).toISOString(); } catch(e){}
       }
 
-      // variant can be top-level or inside meta/summary
+  // participantName can appear in several places depending on export shape
+  // prefer top-level `participantName`, then `meta.participantName`, then `meta.participant.name`
+  metrics.participantName = parsed.participantName || (parsed.meta && (parsed.meta.participantName || (parsed.meta.participant && parsed.meta.participant.name))) || null;
+
+  // variant can be top-level or inside meta/summary
       metrics.variant = parsed.variant || (parsed.meta && parsed.meta.variant) || (parsed.summary && parsed.summary.variant) || parsed.variantName || metrics.variant;
 
       // Preferred: top-level counts object (may contain per-variant sub-objects)
@@ -191,7 +195,8 @@
       countsSummary = summarizeCounts(session.metrics.counts);
     }
 
-    const lastTask = session.metrics.lastTaskName ? escapeHtml(String(session.metrics.lastTaskName)) : '—';
+  const participant = session.metrics.participantName ? escapeHtml(String(session.metrics.participantName)) : '—';
+  const lastTask = session.metrics.lastTaskName ? escapeHtml(String(session.metrics.lastTaskName)) : '—';
     const lastDur = (typeof session.metrics.lastTaskDurationS === 'number') ? String(session.metrics.lastTaskDurationS) : '—';
     const longest = session.metrics.longestTaskName ? escapeHtml(String(session.metrics.longestTaskName)) : '—';
     const shortest = session.metrics.shortestTaskName ? escapeHtml(String(session.metrics.shortestTaskName)) : '—';
@@ -201,6 +206,7 @@
 
     tr.innerHTML = `
       <td>${escapeHtml(session.name)}</td>
+      <td>${participant}</td>
       <td>${escapeHtml(String(session.metrics.variant || '—'))}</td>
       <td>${escapeHtml(String(session.metrics.total))}</td>
       <td>${escapeHtml(String(session.metrics.miss || 0))}</td>
@@ -349,6 +355,7 @@
 
       const rows = sessions.map(s => ({
         File: s.name,
+        ParticipantName: s.metrics.participantName || '',
         Variant: s.metrics.variant || '',
         TotalClicks: s.metrics.total || '',
         Missclicks: s.metrics.miss || '',
